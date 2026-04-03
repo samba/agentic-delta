@@ -49,8 +49,32 @@ Produce a practical, evidence-based retrospective that improves next-iteration q
 - Default to minimum-complexity process changes.
 - Require research support for adopted methodological adjustments.
 - If a proposed adjustment is not supported by research, stop and consult the user before adoption.
-- Convert durable lessons into skill updates or new skills.
+- Convert durable lessons into skill updates or new skills only after passing the promotion gates below.
 - Create or update supporting reference material for those skills.
+
+## Promotion and Drift Controls
+
+Use the following gates before promoting a lesson into `abstract-method` or creating a new skill:
+
+- Evidence-quality gate: require at least 2 independent evidence points or 2 queue cycles, each with concrete refs.
+- Stability gate: require the pattern to persist after a recheck window or follow-up observation, not just in one noisy slice.
+- Applicability-signal gate: require at least one of:
+  - user assertion signal: the user explicitly states the refinement is broadly applicable beyond the project, with abstract field-relevant framing,
+  - field-research signal: external discipline references identify related practices/dynamics that support transferability.
+- Portability gate: remove project nouns, paths, and local constraints; the remaining rule must still be actionable.
+- Overlap gate: confirm the existing skill set does not already cover the pattern with a smaller update.
+- Boundary gate: define what the rule does not cover so it cannot expand into unrelated cases.
+- User-confirmation gate: for new skills, present the split/merge rationale and get explicit approval before adoption.
+
+If any gate fails, keep the item in `project-context`, defer it, or merge it into an existing skill instead of creating a new one.
+
+Anti-drift safeguards:
+
+- Prefer the smallest change that resolves the observed pattern.
+- Treat a single project or a single incident as insufficient for abstract-method promotion unless the pattern is independently repeated.
+- If a promoted abstract delta later increases churn, ambiguity, or rework, mark it as deprecated, revert it in the next revision, and note the replacement rule or rollback reason.
+- Maintain a brief stability note for each promoted delta: what stayed true, what changed, and what was not yet validated.
+- Record an applicability note for each promoted delta: intended discipline scope, transfer assumptions, and exclusion conditions.
 
 ## Context Partitioning (Mandatory)
 
@@ -62,10 +86,12 @@ All reflection artifacts must be partitioned into two explicit tracks:
 Hard rules:
 
 - Do not leak project-specific policy, naming, paths, variables, or architecture into abstract skills.
-- Before analysis, run a classification gate for each topic: assign `track`, `evidence_scope`, and `split_handling`, then record a short reason summary.
+- Before analysis, run a classification gate for each topic: assign `track`, `evidence_scope`, `split_handling`, `applicability_realm`, and `applicability_signal`, then record a short reason summary.
 - `track` must be one of `project-context` or `abstract-method`.
 - `evidence_scope` should state whether the evidence is `project-only`, `cross-project`, or `generic`.
 - `split_handling` should state whether the topic is `single-track`, `paired`, or `defer`.
+- `applicability_realm` should state where the refinement is expected to hold (`project-only`, `project-family`, or `discipline-general`).
+- `applicability_signal` should state which promotion signal is currently present (`user-assertion`, `field-research`, `both`, or `none`).
 - Run a leakage audit on every `abstract-method` candidate; if it contains project-specific identifiers, keep it in `project-context` or split it into a paired delta.
 - If a candidate improvement contains project context, keep it in the project track only.
 - For each topic, produce paired outputs when relevant:
@@ -85,7 +111,7 @@ Hard rules:
    - Extract plan-state signals: stale plans, blocked lanes, ownership-boundary drift.
 
 2.5. **Classify topics before conclusions**
-   - Assign `track`, `evidence_scope`, and `split_handling` for each topic.
+   - Assign `track`, `evidence_scope`, `split_handling`, `applicability_realm`, and `applicability_signal` for each topic.
    - Record a short reason summary for the classification.
    - Run the leakage audit before any abstract-method delta is accepted.
 
@@ -115,6 +141,18 @@ Hard rules:
      - what to gate with criteria.
    - Keep each action small, testable, and enforceable.
 
+5.5. **Run precursor research and applicability mapping (mandatory before promotion)**
+   - For each candidate refinement (`project-context` and `abstract-method`), run a short precursor research pass before derivation.
+   - Record precursor research artifacts for each candidate:
+     - search keywords for future retrieval,
+     - early findings from initial research,
+     - reference links to proof material.
+   - Map the likely realm of applicability (`project-only`, `project-family`, `discipline-general`) and record why.
+   - Use at least one of:
+     - explicit user assertion of broad applicability in abstract field terms,
+     - external discipline research on comparable practices/dynamics.
+   - If neither signal exists, keep the refinement as `project-context` or mark it `defer` pending research.
+
 6. **Encode learnings into two-fold deltas**
    - For each durable lesson, decide whether it belongs to:
      - `project-context`,
@@ -123,6 +161,8 @@ Hard rules:
    - Update project artifacts only with project-context deltas.
    - Update reusable skills only with abstract-method deltas.
    - Add supporting references (templates/checklists/decision rules) to the matching track.
+   - Before accepting an abstract-method delta, pass the evidence-quality, stability, applicability-signal, portability, overlap, and boundary gates.
+   - Before creating a new skill, require the same gates plus an explicit split/merge decision and user confirmation.
    - Prefer simple reusable workflows over broad policy prose.
    - When a coordination skill uses weighted routing or thresholds, review whether outcomes justify recalibrating:
      - dimension weights,
@@ -143,6 +183,7 @@ Hard rules:
    - Separate:
      - research-backed adjustments (ready to adopt),
      - hypothesis adjustments (require user consultation before adoption).
+   - Do not promote a hypothesis into `abstract-method` until it survives a follow-up check and the overlap/boundary gates still hold.
 
 9. **Return deliverables**
    - Use the template in `references/reflection-output-template.md`.
@@ -160,12 +201,15 @@ Hard rules:
 - Two-fold delta list:
   - project-context deltas (project-only),
   - abstract-method deltas (skill-level reusable).
+- For each abstract-method delta, record evidence quality, stability check, applicability signal(s), overlap check, portability check, boundary definition, and applicability realm.
+- For each new skill, record the split/merge rationale and the user confirmation point.
 - Two-track research/hypothesis backlog with impact rationale per track.
 - In "improve your methods" mode:
   - a backlog-resolution report,
   - a list of research-backed method changes,
   - a separate consultation list for non-research-backed hypotheses.
   - when weighted coordination routing is in use, a short calibration note stating whether current weights and thresholds should stay fixed or be adjusted.
+  - a deprecation/rollback note for any previously promoted delta that no longer holds.
 
 ## Reference Material
 

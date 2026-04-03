@@ -10,7 +10,7 @@
 
 - `project-context`: repository/process-specific findings and actions.
 - `abstract-method`: reusable workflow/reasoning improvements.
-- Classification gate: record `track`, `evidence_scope`, `split_handling`, and a short reason summary for each topic.
+- Classification gate: record `track`, `evidence_scope`, `split_handling`, `applicability_realm`, `applicability_signal`, and a short reason summary for each topic.
 - Leakage check: confirm no project-specific names/paths/policies appear in abstract-method outputs.
 
 ## High-Signal Outcomes
@@ -111,9 +111,23 @@
    - Scope:
    - Completion signal:
 
+## Precursor Research and Applicability Mapping
+
+1. Candidate refinement:
+   - Track (`project-context` | `abstract-method`):
+   - Precursor research summary:
+     - Search keywords for future research:
+     - Early research findings:
+     - Proof material links:
+   - Applicability realm (`project-only` | `project-family` | `discipline-general`):
+   - Signal source (`user-assertion` | `field-research` | `both`):
+   - Promotion recommendation (`keep project-context` | `promote abstract-method` | `defer`):
+
 ## Skill Deltas (Two-Fold)
 
 - Reason summary: briefly explain why each delta was kept in one track or split across both.
+- For each abstract-method delta, include evidence quality, stability, applicability signal(s), overlap, portability, boundary definition, applicability realm, and rollback/deprecation condition.
+- For each new skill, include the split/merge rationale and the user confirmation point.
 
 ### project-context deltas
 
@@ -126,6 +140,7 @@
 - Updated reusable skills:
 - New reusable skills:
 - Supporting references created/updated:
+- Promotion summary reference: point to the matching item in `Precursor Research and Applicability Mapping`.
 
 ## Backlog and Hypotheses (Two-Track)
 
