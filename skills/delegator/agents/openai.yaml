@@ -1,0 +1,6 @@
+interface:
+  display_name: "Delegator"
+  short_description: "Delegate background work into lanes"
+  default_prompt: "Use $delegator to split delegated or background work into queueable worker lanes, starting with research when needed and refining criteria before implementation."
+policy:
+  allow_implicit_invocation: true
