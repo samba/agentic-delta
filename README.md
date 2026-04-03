@@ -83,10 +83,10 @@ Reflection loop induction:
 
 Sample reflection-loop output reports:
 
-- [Reflection Report Samples](/home/samba/Projects/skills/docs/reflection-report-samples.md)
-- [Delegation-Derived Reflection Backlog Item (Sample)](/home/samba/Projects/skills/docs/reflection-report-samples.md#delegation-derived-backlog-item-sample)
+- [Reflection Report Samples](docs/reflection-report-samples.md)
+- [Delegation-Derived Reflection Backlog Item (Sample)](docs/reflection-report-samples.md#delegation-derived-backlog-item-sample)
 
 ## Layout
 
-- [`Makefile`](/home/samba/Projects/skills/Makefile): imports local skill directories into this repo
-- [`skills/`](/home/samba/Projects/skills/skills): consolidated skill definitions and references
+- [`Makefile`](Makefile): imports local skill directories into this repo
+- [`skills/`](skills/): consolidated skill definitions and references
