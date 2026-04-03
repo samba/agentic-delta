@@ -62,6 +62,30 @@ Import mechanics:
 - Source skill directories containing `SKILL.md` are copied into `./skills`; destination directories are replaced.
 - If duplicate skill names exist across sources, later iteration order in `Makefile` wins.
 
+## Example Prompts
+
+Use plain human language to trigger the stack behaviors.
+
+Delegated parallel background work (small scope):
+
+- "Please delegate this in the background while we keep planning: update the README examples section, fix any broken links, and report back when done."
+- "Queue a small background lane to clean up Makefile comments and keep me posted without blocking this thread."
+
+Delegated parallel background work (large scope):
+
+- "Delegate this as a multi-lane background effort: refactor the skill templates for consistency, add validation checks, and prepare draft commits per lane. Keep the foreground thread free for prioritization."
+- "Split this into research, implementation, and verification lanes running in parallel. Keep queue state visible and only block me if a decision is required."
+
+Reflection loop induction:
+
+- "Run a reflection on the last 2 days, classify project-context vs abstract-method deltas, and propose the next reinforcement actions."
+- "Improve your methods based on the past week of execution, including evidence-backed changes, deferred hypotheses, and any new skill candidates."
+
+Sample reflection-loop output reports:
+
+- [Reflection Report Samples](/home/samba/Projects/skills/docs/reflection-report-samples.md)
+- [Delegation-Derived Reflection Backlog Item (Sample)](/home/samba/Projects/skills/docs/reflection-report-samples.md#delegation-derived-backlog-item-sample)
+
 ## Layout
 
 - [`Makefile`](/home/samba/Projects/skills/Makefile): imports local skill directories into this repo
