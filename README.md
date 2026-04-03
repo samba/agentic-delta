@@ -2,6 +2,10 @@
 
 This repository is a working skill stack for improving execution quality over time, not just a collection of unrelated `SKILL.md` files.
 
+## AI Collaboration Note
+
+This project is managed with the aid of an AI coding agent. The skills in this repository were composed and refined conversationally with AI agents under human direction.
+
 The skills are designed to run as a loop:
 
 1. `delegator` coordinates work into explicit lanes with clear exit criteria and validation gates.
