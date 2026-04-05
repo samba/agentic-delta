@@ -47,6 +47,11 @@ Typical use pattern:
 5. Apply approved deltas by updating project-specific artifacts for the first track, and updating/adding skills for the second track.
 6. Repeat.
 
+Reflection output must include:
+
+- an a priori knowledge audit (known facts, assumptions, and assumptions acted on without verification),
+- miss classification for each miss as `preventable` or `non-preventable` with rationale.
+
 ## Repository Workflow
 
 Treat this repository as the coordination layer for a skill lifecycle:
@@ -75,6 +80,13 @@ Delegated parallel background work (large scope):
 
 - "Delegate this as a multi-lane background effort: refactor the skill templates for consistency, add validation checks, and prepare draft commits per lane. Keep the foreground thread free for prioritization."
 - "Split this into research, implementation, and verification lanes running in parallel. Keep queue state visible and only block me if a decision is required."
+
+Delegator command grammar and status control:
+
+- `enter delegator mode` / `exit delegator mode`
+- `async <verb> <context>` for background-only execution lanes
+- `active <verb> <context>` for one foreground override while in delegator mode
+- `work status` for active/queued lanes, worker assignment, and recent completion evidence
 
 Reflection loop induction:
 

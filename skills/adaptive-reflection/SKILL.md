@@ -109,6 +109,7 @@ Hard rules:
    - Extract thread signals: interruptions, corrections, approvals, reversals, explicit dislikes.
    - Extract project signals: commit clusters, reverted work, repeated failure points, test outcomes.
    - Extract plan-state signals: stale plans, blocked lanes, ownership-boundary drift.
+   - Run an a priori knowledge audit: facts known before execution, assumptions made, and assumptions acted on without verification.
 
 2.5. **Classify topics before conclusions**
    - Assign `track`, `evidence_scope`, `split_handling`, `applicability_realm`, and `applicability_signal` for each topic.
@@ -120,6 +121,8 @@ Hard rules:
      - value delivered,
      - cost/churn introduced,
      - fit to project goals.
+   - Classify each miss as `preventable` or `non-preventable`.
+   - Use `preventable` when available evidence, checks, or constraints should reasonably have avoided it; use `non-preventable` when the miss depended on unknown or changed external conditions that were not reasonably verifiable in time.
    - Identify failure patterns:
      - over-complexity,
      - ownership breaches,
@@ -198,6 +201,8 @@ Hard rules:
 - A timeframe-bounded reflection report.
 - A prioritized list of reinforcement actions.
 - A concise reason summary for each topic classification or split decision.
+- An a priori knowledge audit covering known facts, assumptions made, and assumptions acted on without verification.
+- Miss classification for each miss, labeled `preventable` or `non-preventable` with a brief rationale.
 - Two-fold delta list:
   - project-context deltas (project-only),
   - abstract-method deltas (skill-level reusable).

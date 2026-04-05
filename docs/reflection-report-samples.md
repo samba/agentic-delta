@@ -24,6 +24,13 @@ This file contains template-aligned example outputs for a reflection loop in a s
   - Reason summary: The sequence (schema review -> query-plan review -> preflight drift check) is portable across graph-backed service teams.
 - Leakage check: abstract-method outputs avoid project-specific identifiers.
 
+## A Priori Knowledge Audit
+
+- Known facts before execution: recommendation fan-out behavior was sensitive to query-shape changes; prior soak tests had already shown occasional async session lifecycle instability.
+- Assumptions made: index updates and aggregation adjustments would not affect downstream relationship envelope expectations.
+- Assumptions acted on without verification: optimization branch changes were implemented before completing query-stream preflight checks against downstream expectations.
+- Audit implication: add explicit pre-coding verification gates and block implementation start when baseline checks are incomplete.
+
 ## High-Signal Outcomes
 
 ### project-context
@@ -55,12 +62,16 @@ This file contains template-aligned example outputs for a reflection loop in a s
 ### project-context
 
 1. Pattern: Duplicate nodes in recommendations under high fan-out.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: uniqueness/cardinality assertions were feasible and should have been required before merge.
    - Failure mode: Aggregation path produced repeated nodes.
    - Evidence: `test_recommendations_unique_nodes` failed.
    - Impact: Incorrect recommendations and avoidable client-side deduping.
    - Preventive rule: Require uniqueness assertions and cardinality checks in integration tests for fan-out queries.
 
 2. Pattern: Intermittent connection leaks in async graph-driver sessions.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: existing soak-test evidence already indicated session-scope risk and should have blocked rollout without error-path coverage.
    - Failure mode: Session lifecycle escaped request scope under error paths.
    - Evidence: Soak tests showed steadily rising open sessions.
    - Impact: Elevated resource pressure and unstable tail latencies.
@@ -69,12 +80,16 @@ This file contains template-aligned example outputs for a reflection loop in a s
 ### abstract-method
 
 1. Pattern: Data-handling work started without schema compatibility review.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: schema/query preflight gates were available and would have caught the mismatch before coding.
    - Failure mode: Edge filters were introduced without validating required relationship availability.
    - Evidence: Query-stream preflight flagged unexpected null traversals.
    - Impact: Avoidable rework to revert and re-plan implementation.
    - Preventive rule: Do not begin code generation until schema review, query-plan review, and preflight drift checks are complete.
 
 2. Pattern: Query optimization landed without stream-expectation baseline.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: baseline generation was part of planning and should have been mandatory for query-shape changes.
    - Failure mode: Ranking pipeline received missing edges after optimization.
    - Evidence: Relationship-count mismatch alert in downstream service.
    - Impact: Rework in ranking logic and rollback overhead.
@@ -221,6 +236,13 @@ This file contains template-aligned example outputs for a reflection loop in a s
   - Reason summary: Portable engineering discipline with both observed project value and field support.
 - Leakage check: abstract-method outputs exclude project-specific paths and naming.
 
+## A Priori Knowledge Audit
+
+- Known facts before execution: migration/index drift had previously impacted plan quality, and retry behavior on non-idempotent writes was known to be high-risk.
+- Assumptions made: migration naming updates and retry middleware changes would remain behaviorally safe without expanded replay validation.
+- Assumptions acted on without verification: query optimization and migration-related adjustments were advanced before complete expectation-baseline confirmation.
+- Audit implication: enforce earlier baseline evidence capture and tighten rollout gates for migration and retry-path changes.
+
 ## High-Signal Outcomes
 
 ### project-context
@@ -252,12 +274,16 @@ This file contains template-aligned example outputs for a reflection loop in a s
 ### project-context
 
 1. Pattern: Migration created index with mismatched property casing.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: migration assertions could validate property naming deterministically before deployment.
    - Failure mode: Label scan fallback after migration.
    - Evidence: Query plan regression immediately post-migration.
    - Impact: Latency regression risk and recovery overhead.
    - Preventive rule: enforce migration assertions on index property names before deploy.
 
 2. Pattern: Retry middleware amplified transient driver failures into duplicate writes.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: idempotency-key and retry-policy controls were known mitigations and should have been required.
    - Failure mode: retried non-idempotent write path.
    - Evidence: duplicate recommendation edges found in replay tests.
    - Impact: data correctness risk and cleanup rework.
@@ -266,12 +292,16 @@ This file contains template-aligned example outputs for a reflection loop in a s
 ### abstract-method
 
 1. Pattern: Query optimization merged without preflight expectation baseline.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: expectation-baseline checks were already identified as required for this class of change.
    - Failure mode: missing edges in downstream ranking stream.
    - Evidence: expected-vs-observed relationship mismatch alerts.
    - Impact: ranking quality regression and emergency rollback.
    - Preventive rule: preflight expectation baseline must pass before merge for query-shape changes.
 
 2. Pattern: Query-plan review skipped during early implementation.
+   - Miss classification (`preventable` | `non-preventable`): `preventable`
+   - Miss rationale: plan review could be completed pre-coding with low incremental cost and high risk reduction.
    - Failure mode: high-cost plan reached load testing.
    - Evidence: avoidable P99 spike on graph-heavy endpoint.
    - Impact: delayed release and additional tuning cycle.

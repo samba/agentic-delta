@@ -39,17 +39,28 @@
    - Evidence:
    - Why it worked:
 
+## A Priori Knowledge Audit
+
+- Known facts before execution:
+- Assumptions made:
+- Assumptions acted on without verification:
+- Audit implication:
+
 ## Negative Signals and Friction
 
 ### project-context
 
 1. Pattern:
+   - Miss classification (`preventable` | `non-preventable`):
+   - Miss rationale:
    - Failure mode:
    - Evidence:
    - Impact:
    - Preventive rule:
 
 2. Pattern:
+   - Miss classification (`preventable` | `non-preventable`):
+   - Miss rationale:
    - Failure mode:
    - Evidence:
    - Impact:
@@ -58,12 +69,16 @@
 ### abstract-method
 
 1. Pattern:
+   - Miss classification (`preventable` | `non-preventable`):
+   - Miss rationale:
    - Failure mode:
    - Evidence:
    - Impact:
    - Preventive rule:
 
 2. Pattern:
+   - Miss classification (`preventable` | `non-preventable`):
+   - Miss rationale:
    - Failure mode:
    - Evidence:
    - Impact:

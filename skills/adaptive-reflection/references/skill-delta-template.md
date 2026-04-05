@@ -6,6 +6,7 @@
 - Evidence scope: `project-only` | `cross-project` | `generic`
 - Split handling: `single-track` | `paired` | `defer`
 - Applicability realm: `project-only` | `project-family` | `discipline-general`
+- Applicability signal: `user-assertion` | `field-research` | `both` | `none`
 - Reason summary: one short sentence for the track choice and any split decision.
 - If both are needed, create two separate records.
 - Leakage check (required for `abstract-method`): no project-specific paths, names, variables, or architecture details.

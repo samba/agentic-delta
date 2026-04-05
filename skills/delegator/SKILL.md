@@ -24,6 +24,18 @@ Expected flow:
 
 ## Operating Rules
 
+- Prompt grammar:
+  - `async <verb> <context>` means coordinate the action entirely in background lanes.
+  - In `async` flow, foreground returns to planning and status only, not implementation.
+- Mode control:
+  - `enter delegator mode` enables strict enforcement: foreground stays planning-only and active implementation runs strictly in background lanes.
+  - `exit delegator mode` allows foreground to resume active implementation focus.
+- Per-prompt override while in delegator mode:
+  - `active <verb> <context>` allows immediate foreground execution for that task.
+  - After the active task completes, delegator mode remains the default.
+- Interaction precedence:
+  - In delegator mode, ambiguous execution requests default to background lanes unless explicitly prefixed `active`.
+  - Status reporting and completion notifications remain unchanged.
 - Do not execute delegated implementation work in the main thread.
 - If no workers are available, queue delegated tasks and dispatch them to the next available worker.
 - Keep delegated lanes running in the background while the foreground thread stays available for planning and prioritization.
@@ -51,6 +63,28 @@ Expected flow:
 - Before dispatching validation work, evaluate whether any required test run is likely to exceed 30 seconds.
 - If expensive validation (>30s expected) is needed, present the expected test path to the user for approval before execution.
 - Do not execute unapproved expensive test runs in background workers.
+- If an expensive run fails after a change intended to fix a known issue, immediately switch to diagnostic/research mode.
+- Freeze further implementation changes that would require another expensive run.
+- Before any further expensive run, require a confidence reset:
+  1. extract failure evidence,
+  2. re-rank hypotheses,
+  3. research unresolved high-impact questions,
+  4. define the smallest high-confidence delta,
+  5. state the expected observable effect.
+- Only then permit another expensive run.
+
+## Status Command
+
+When the user issues the brief prompt `work status`, return a full background-work report that includes:
+
+- all active lanes,
+- all queued lanes,
+- all workers and current assignment/state,
+- completion results for prior work.
+
+For prior work, include test results and validation outcomes that have not already been reported in the preceding 10 minutes.
+If a result was already reported within that window, summarize it briefly and avoid duplicate detail.
+When possible, include commit hashes, changed-file scope, and pending blockers.
 
 
 ## Pattern Sensing and Reflection Loop

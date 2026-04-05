@@ -1,5 +1,14 @@
 # Delegator Workflow
 
+## Command Grammar and Modes
+
+- `async <verb> <context>`: route execution entirely to background lanes; foreground remains planning/status only.
+- `enter delegator mode`: force strict planning-only foreground behavior until explicitly exited.
+- `active <verb> <context>`: one per-prompt override that allows foreground execution while delegator mode remains active.
+- `exit delegator mode`: return foreground to normal execution behavior.
+
+In delegator mode, ambiguous execution requests default to background lanes unless prefixed `active`.
+
 ## Queue Model
 
 Use a queue of lanes rather than a single monolithic task when work can be split safely.
@@ -96,6 +105,17 @@ When a reflection backlog candidate is proposed, notify the user immediately wit
 - track (`project-context` or `abstract-method`)
 - evidence refs
 
+## Status Command
+
+When the user sends `work status`, report:
+- all active lanes,
+- all queued lanes,
+- all workers and their assignment/state,
+- completion results from prior work.
+
+For prior results, include tests/validation outcomes not already reported in the previous 10 minutes; if already reported, summarize briefly.
+Include commit hashes, changed-file scope, and blockers when available.
+
 ## Prioritization
 
 Order lanes by:
@@ -170,6 +190,23 @@ Style constraints:
 - If lane output violates ownership scope: reject and re-run with narrowed instructions.
 - If lane cannot complete full scope safely: accept a bounded fallback slice only when exit criteria are rewritten and met.
 - If tests conflict across lanes: serialize final integration in the coordinator and re-run merged validation.
+
+## Expensive Validation Confidence Reset
+
+Before dispatching validation, estimate whether required test paths exceed 30 seconds.
+- If expected >30 seconds, require user approval of the test path before execution.
+- Do not run unapproved expensive tests in background lanes.
+
+If an expensive run fails after a fix attempt:
+1. switch to diagnostic/research mode,
+2. freeze further implementation changes that would require another expensive run,
+3. perform a confidence reset:
+   - extract failure evidence,
+   - re-rank hypotheses,
+   - research unresolved high-impact questions,
+   - define the smallest high-confidence delta,
+   - state expected observable effect.
+4. only then permit another expensive run.
 
 ## Suggested Lane Prompt
 
