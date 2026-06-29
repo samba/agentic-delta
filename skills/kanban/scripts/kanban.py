@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""SQLite-backed project kanban helper.
-
-The database is the canonical machine-editable state. YAML import/export is kept
-for migration, review snapshots, and interoperability with older workflows.
-"""
+"""SQLite-backed project kanban helper."""
 
 from __future__ import annotations
 
@@ -15,18 +11,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover - validated by command behavior.
-    yaml = None
-
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = Path.cwd().resolve()
 KANBAN_DIR = ROOT / ".kanban"
 DEFAULT_DB = KANBAN_DIR / "kanban.db"
-DEFAULT_BOARD_YAML = KANBAN_DIR / "kanban.yaml"
-DEFAULT_BACKLOG_YAML = KANBAN_DIR / "backlog.yaml"
 DEFAULT_SCHEMA_PATH = SCRIPT_DIR / "schema.sql"
 DEFAULT_COLUMN_WIP_LIMITS = {
     "Active": 1,
@@ -130,11 +118,6 @@ def fail(message: str, code: int = 2) -> None:
     raise SystemExit(code)
 
 
-def require_yaml() -> None:
-    if yaml is None:
-        fail("Missing Python dependency: PyYAML")
-
-
 def now() -> int:
     return int(time.time())
 
@@ -147,17 +130,6 @@ def json_loads(value: str | None, default: Any = None) -> Any:
     if value is None or value == "":
         return default
     return json.loads(value)
-
-
-def load_yaml(path: Path) -> Any:
-    require_yaml()
-    with path.open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
-
-
-def dump_yaml(value: Any) -> str:
-    require_yaml()
-    return yaml.safe_dump(value, sort_keys=False, default_flow_style=False)
 
 
 def connect(db: Path) -> sqlite3.Connection:
@@ -468,262 +440,6 @@ def upsert_task(conn: sqlite3.Connection, card: dict[str, Any]) -> None:
         )
 
 
-def import_board(conn: sqlite3.Connection, board_path: Path, backlog_path: Path | None) -> None:
-    data = load_yaml(board_path)
-    if not isinstance(data, dict):
-        fail(f"Board YAML must be a mapping: {board_path}")
-    cards = data.get("cards") or []
-    if not isinstance(cards, list):
-        fail("Board YAML cards must be a list")
-    timestamp = now()
-    with conn:
-        conn.execute("DELETE FROM constraints_kv")
-        for key, value in (data.get("constraints") or {}).items():
-            conn.execute(
-                "INSERT INTO constraints_kv(key, value_json) VALUES(?, ?)",
-                (str(key), json_dumps(value)),
-            )
-        conn.execute("DELETE FROM progression_kv")
-        for key, value in (data.get("progression") or {}).items():
-            conn.execute(
-                "INSERT INTO progression_kv(key, value_json) VALUES(?, ?)",
-                (str(key), json_dumps(value)),
-            )
-        columns = data.get("columns") or []
-        if columns:
-            conn.execute("DELETE FROM column_wip_limits")
-            conn.execute("DELETE FROM column_transitions")
-            conn.execute("DELETE FROM columns")
-            for column in columns:
-                if not isinstance(column, dict):
-                    fail("Each column must be a mapping")
-                column_name = str(column.get("name") or "")
-                if not column_name:
-                    fail("Column without name cannot be imported")
-                conn.execute(
-                    """
-                    INSERT INTO columns(name, position, description, required_rules_json, direction, active)
-                    VALUES(?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        column_name,
-                        int(column.get("position") or 0),
-                        scalar_text(column.get("description")),
-                        json_dumps(column.get("required_rules") or []),
-                        str(column.get("direction") or "forward"),
-                        0 if column.get("active") is False else 1,
-                    ),
-                )
-                if column.get("wip_limit") is not None:
-                    limit = column.get("wip_limit")
-                    if not isinstance(limit, int) or limit < 1:
-                        fail(f"Column {column_name} wip_limit must be a positive integer")
-                    conn.execute(
-                        """
-                        INSERT INTO column_wip_limits(column_name, limit_value)
-                        VALUES(?, ?)
-                        """,
-                        (column_name, limit),
-                    )
-            for column in columns:
-                column_name = str(column.get("name") or "")
-                for transition in column.get("transitions") or []:
-                    if isinstance(transition, dict):
-                        to_column = str(transition.get("to") or "")
-                        rule = scalar_text(transition.get("rule"))
-                    else:
-                        to_column = str(transition)
-                        rule = None
-                    if not to_column:
-                        fail(f"Column {column_name} has transition without destination")
-                    conn.execute(
-                        """
-                        INSERT INTO column_transitions(from_column, to_column, rule)
-                        VALUES(?, ?, ?)
-                        """,
-                        (column_name, to_column, rule),
-                    )
-        backfill_goals = data.get("backfill_goals") or []
-        if backfill_goals:
-            conn.execute("DELETE FROM backfill_goals")
-            for goal in backfill_goals:
-                if not isinstance(goal, dict):
-                    fail("Each backfill goal must be a mapping")
-                column_name = str(goal.get("column") or "")
-                if not column_name:
-                    fail("Backfill goal without column cannot be imported")
-                require_column(conn, column_name)
-                target = goal.get("target")
-                if not isinstance(target, int) or target < 0:
-                    fail(f"Backfill goal {column_name} target must be a non-negative integer")
-                conn.execute(
-                    """
-                    INSERT INTO backfill_goals(column_name, target_value, description)
-                    VALUES(?, ?, ?)
-                    """,
-                    (column_name, target, scalar_text(goal.get("description"))),
-                )
-        ensure_default_wip_limits(conn)
-        ensure_default_backfill_goals(conn)
-        conn.execute("DELETE FROM tasks")
-        for card in cards:
-            if not isinstance(card, dict):
-                fail("Each card must be a mapping")
-            require_column(conn, str(card.get("column") or "Backlog"))
-            upsert_task(conn, card)
-        conn.execute("DELETE FROM principles")
-        for theme, principles in (data.get("theme_principles") or {}).items():
-            for principle in principles or []:
-                principle_id = str(principle.get("id") or f"{theme}:{timestamp}")
-                conn.execute(
-                    """
-                    INSERT INTO principles(id, theme, statement, status, raw_json, updated_at)
-                    VALUES(?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        principle_id,
-                        str(theme),
-                        str(principle.get("statement") or ""),
-                        str(principle.get("status") or "active"),
-                        json_dumps(principle),
-                        timestamp,
-                    ),
-                )
-        conn.execute(
-            "INSERT INTO meta(key, value) VALUES('source_board_yaml', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (str(board_path),),
-        )
-    if backlog_path and backlog_path.exists():
-        import_backlog(conn, backlog_path)
-
-
-def import_backlog(conn: sqlite3.Connection, backlog_path: Path) -> None:
-    data = load_yaml(backlog_path)
-    if not isinstance(data, dict):
-        fail(f"Backlog YAML must be a mapping: {backlog_path}")
-    timestamp = now()
-    with conn:
-        conn.execute("DELETE FROM backlog_ideas")
-        for idea in data.get("ideas") or []:
-            if not isinstance(idea, dict):
-                fail("Each backlog idea must be a mapping")
-            idea_id = str(idea.get("id") or "")
-            if not idea_id:
-                fail("Backlog idea without id cannot be imported")
-            summary = idea.get("summary") or idea.get("title") or idea.get("goal")
-            conn.execute(
-                """
-                INSERT INTO backlog_ideas(id, summary, status, themes_json, raw_json, updated_at)
-                VALUES(?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    idea_id,
-                    scalar_text(summary),
-                    scalar_text(idea.get("status")),
-                    json_dumps(idea.get("themes") or []),
-                    json_dumps(idea),
-                    timestamp,
-                ),
-            )
-        conn.execute(
-            "INSERT INTO meta(key, value) VALUES('source_backlog_yaml', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (str(backlog_path),),
-        )
-
-
-def export_board(conn: sqlite3.Connection) -> dict[str, Any]:
-    constraints = {
-        row["key"]: json_loads(row["value_json"])
-        for row in conn.execute("SELECT key, value_json FROM constraints_kv ORDER BY key")
-    }
-    progression = {
-        row["key"]: json_loads(row["value_json"])
-        for row in conn.execute("SELECT key, value_json FROM progression_kv ORDER BY key")
-    }
-    backfill_goals = [
-        {
-            "column": row["column_name"],
-            "target": row["target_value"],
-            "description": row["description"],
-        }
-        for row in conn.execute(
-            """
-            SELECT column_name, target_value, description
-            FROM backfill_goals
-            ORDER BY COALESCE((SELECT position FROM columns WHERE name = column_name), 9999),
-                     column_name
-            """
-        )
-    ]
-    cards = [
-        json_loads(row["raw_json"])
-        for row in conn.execute("SELECT raw_json FROM tasks ORDER BY rowid")
-    ]
-    columns: list[dict[str, Any]] = []
-    for row in conn.execute(
-        """
-        SELECT name, position, description, required_rules_json, direction, active
-        FROM columns
-        ORDER BY position, name
-        """
-    ):
-        transitions: list[dict[str, Any]] = []
-        for transition in conn.execute(
-            """
-            SELECT to_column, rule
-            FROM column_transitions
-            WHERE from_column = ?
-            ORDER BY to_column
-            """,
-            (row["name"],),
-        ):
-            item: dict[str, Any] = {"to": transition["to_column"]}
-            if transition["rule"]:
-                item["rule"] = transition["rule"]
-            transitions.append(item)
-        column = {
-            "name": row["name"],
-            "position": row["position"],
-            "description": row["description"],
-            "required_rules": json_loads(row["required_rules_json"], []),
-            "direction": row["direction"],
-            "active": bool(row["active"]),
-        }
-        wip_row = conn.execute(
-            "SELECT limit_value FROM column_wip_limits WHERE column_name = ?",
-            (row["name"],),
-        ).fetchone()
-        if wip_row is not None:
-            column["wip_limit"] = wip_row["limit_value"]
-        if transitions:
-            column["transitions"] = transitions
-        columns.append(column)
-    theme_principles: dict[str, list[Any]] = {}
-    for row in conn.execute("SELECT theme, raw_json FROM principles ORDER BY theme, id"):
-        theme_principles.setdefault(row["theme"], []).append(json_loads(row["raw_json"]))
-    data: dict[str, Any] = {
-        "version": 1,
-        "constraints": constraints,
-        "backfill_goals": backfill_goals,
-        "progression": progression,
-        "columns": columns,
-        "cards": cards,
-    }
-    if theme_principles:
-        data["theme_principles"] = theme_principles
-    return data
-
-
-def export_backlog(conn: sqlite3.Connection) -> dict[str, Any]:
-    ideas = [
-        json_loads(row["raw_json"])
-        for row in conn.execute("SELECT raw_json FROM backlog_ideas ORDER BY rowid")
-    ]
-    return {"version": 1, "ideas": ideas}
-
-
 def list_config(conn: sqlite3.Connection) -> None:
     for row in conn.execute(
         """
@@ -883,7 +599,7 @@ def show_task(conn: sqlite3.Connection, task_id: str) -> None:
     row = conn.execute("SELECT raw_json FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         fail(f"Unknown task: {task_id}")
-    print(dump_yaml(json_loads(row["raw_json"])), end="")
+    print(json.dumps(json_loads(row["raw_json"]), indent=2, sort_keys=True))
 
 
 def list_backlog(conn: sqlite3.Connection) -> None:
@@ -1071,14 +787,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("init")
 
-    p_import = sub.add_parser("import-yaml")
-    p_import.add_argument("--board", type=Path, default=DEFAULT_BOARD_YAML)
-    p_import.add_argument("--backlog", type=Path, default=DEFAULT_BACKLOG_YAML)
-
-    p_export = sub.add_parser("export-yaml")
-    p_export.add_argument("--board-out", type=Path)
-    p_export.add_argument("--backlog-out", type=Path)
-
     p_status = sub.add_parser("status")
     p_status.add_argument("--all", action="store_true")
 
@@ -1169,18 +877,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "init":
         print(f"initialized {args.db}")
-    elif args.cmd == "import-yaml":
-        import_board(conn, args.board, args.backlog)
-        print(f"imported board={args.board} backlog={args.backlog}")
-    elif args.cmd == "export-yaml":
-        board = dump_yaml(export_board(conn))
-        backlog = dump_yaml(export_backlog(conn))
-        if args.board_out:
-            args.board_out.write_text(board, encoding="utf-8")
-        else:
-            print(board, end="")
-        if args.backlog_out:
-            args.backlog_out.write_text(backlog, encoding="utf-8")
     elif args.cmd == "status":
         status(conn, args.all)
     elif args.cmd == "validate":

@@ -16,9 +16,9 @@ Read the reference that matches the request:
 
 ## Board State
 
-Use `.kanban/kanban.db` as the canonical project-local state when it exists. It stores cards, backlog records, clarifications, theme principles, columns, transitions, WIP limits, backfill goals, validation state, and events.
+Use `.kanban/kanban.db` as the canonical project-local state. It stores cards, backlog records, clarifications, theme principles, columns, transitions, WIP limits, backfill goals, validation state, and events.
 
-Use `.kanban/kanban.yaml` and `.kanban/backlog.yaml` only as legacy migration input or review/export snapshots when a database exists. Do not hand-edit large YAML board files when the helper can update records directly.
+Do not use legacy `.kanban/kanban.yaml` or `.kanban/backlog.yaml` files for import, export, review snapshots, or ongoing state. The SQLite database and helper commands are the only machine-editable board state.
 
 If no project kanban state exists, keep planning in-session unless the user asks to persist a board or backlog. When persistence is requested, initialize `.kanban/kanban.db` with the bundled helper.
 
@@ -41,8 +41,6 @@ Supported command groups:
 
 ```text
 init
-import-yaml
-export-yaml
 status
 validate
 config list/set
