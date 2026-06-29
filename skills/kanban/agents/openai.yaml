@@ -1,0 +1,6 @@
+interface:
+  display_name: "Kanban"
+  short_description: "Plan, walk, and delegate work through kanban"
+  default_prompt: "Use $kanban to manage planning, backlog grooming, board walks, work status, and delegated/background execution through project-declared kanban columns, SQLite-backed cards, WIP limits, backfill goals, readiness gates, theme principles, review-first and WSJF priority discipline, explicit validation, and completion proof."
+policy:
+  allow_implicit_invocation: true
