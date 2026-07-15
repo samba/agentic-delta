@@ -134,27 +134,44 @@ def json_loads(value: str | None, default: Any = None) -> Any:
 
 def connect(db: Path) -> sqlite3.Connection:
     db.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db)
+    conn = sqlite3.connect(db, timeout=30.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = DELETE")
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
     return conn
+
+
+def write_transaction(conn: sqlite3.Connection) -> Any:
+    class Transaction:
+        def __enter__(self) -> sqlite3.Connection:
+            conn.execute("BEGIN IMMEDIATE")
+            return conn
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            if exc_type is None:
+                conn.commit()
+            else:
+                conn.rollback()
+            return False
+
+    return Transaction()
 
 
 def init_db(conn: sqlite3.Connection, schema_path: Path) -> None:
     if not schema_path.is_file():
         fail(f"Missing schema: {schema_path}")
-    conn.executescript(schema_path.read_text(encoding="utf-8"))
-    conn.execute(
-        "INSERT INTO meta(key, value) VALUES('schema_version', '5') "
-        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
-    )
-    ensure_default_columns(conn)
-    ensure_default_wip_limits(conn)
-    migrate_backfill_goals(conn)
-    ensure_default_backfill_goals(conn)
-    conn.commit()
+    with write_transaction(conn):
+        conn.executescript(schema_path.read_text(encoding="utf-8"))
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES('schema_version', '5') "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+        )
+        ensure_default_columns(conn)
+        ensure_default_wip_limits(conn)
+        migrate_backfill_goals(conn)
+        ensure_default_backfill_goals(conn)
 
 
 def legacy_wip_limit(conn: sqlite3.Connection, key: str, default: int) -> int:
@@ -468,7 +485,7 @@ def set_column_wip_limit(conn: sqlite3.Connection, column: str, limit: int) -> N
     require_column(conn, column)
     if limit < 1:
         fail("WIP limit must be a positive integer")
-    with conn:
+    with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO column_wip_limits(column_name, limit_value)
@@ -483,7 +500,7 @@ def set_backfill_goal(conn: sqlite3.Connection, column: str, target: int, descri
     require_column(conn, column)
     if target < 0:
         fail("Backfill goal target must be a non-negative integer")
-    with conn:
+    with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO backfill_goals(column_name, target_value, description)
@@ -497,37 +514,38 @@ def set_backfill_goal(conn: sqlite3.Connection, column: str, target: int, descri
 
 
 def update_task_raw(conn: sqlite3.Connection, task_id: str, mutate: Any) -> None:
-    row = conn.execute("SELECT raw_json FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    if row is None:
-        fail(f"Unknown task: {task_id}")
-    card = json_loads(row["raw_json"])
-    mutate(card)
-    with conn:
+    with write_transaction(conn):
+        row = conn.execute("SELECT raw_json FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            fail(f"Unknown task: {task_id}")
+        card = json_loads(row["raw_json"])
+        mutate(card)
         upsert_task(conn, card)
 
 
 def task_move(conn: sqlite3.Connection, task_id: str, column: str, owner: str | None) -> None:
     require_column(conn, column)
-    row = conn.execute("SELECT column_name FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    if row is None:
-        fail(f"Unknown task: {task_id}")
-    from_column = row["column_name"]
-    if not transition_allowed(conn, from_column, column):
-        rules = column_rules(conn, column)
-        suffix = f"; {column} requires: {', '.join(rules)}" if rules else ""
-        fail(f"Transition not allowed: {from_column} -> {column}{suffix}")
-
-    def mutate(card: dict[str, Any]) -> None:
+    with write_transaction(conn):
+        row = conn.execute(
+            "SELECT column_name, raw_json FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            fail(f"Unknown task: {task_id}")
+        from_column = row["column_name"]
+        if not transition_allowed(conn, from_column, column):
+            rules = column_rules(conn, column)
+            suffix = f"; {column} requires: {', '.join(rules)}" if rules else ""
+            fail(f"Transition not allowed: {from_column} -> {column}{suffix}")
+        card = json_loads(row["raw_json"])
         card["column"] = column
         if owner is not None:
             card["owner"] = owner
-
-    update_task_raw(conn, task_id, mutate)
-    conn.execute(
-        "INSERT INTO task_events(task_id, event_type, message, created_at) VALUES(?, ?, ?, ?)",
-        (task_id, "move", f"moved to {column}", now()),
-    )
-    conn.commit()
+        upsert_task(conn, card)
+        conn.execute(
+            "INSERT INTO task_events(task_id, event_type, message, created_at) VALUES(?, ?, ?, ?)",
+            (task_id, "move", f"moved to {column}", now()),
+        )
 
 
 def task_set_validation(conn: sqlite3.Connection, task_id: str, status: str, evidence: str | None) -> None:
@@ -610,7 +628,7 @@ def list_backlog(conn: sqlite3.Connection) -> None:
 
 def add_backlog(conn: sqlite3.Connection, idea_id: str, summary: str, themes: list[str]) -> None:
     idea = {"id": idea_id, "summary": summary, "themes": themes, "status": "new"}
-    with conn:
+    with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO backlog_ideas(id, summary, status, themes_json, raw_json, updated_at)
@@ -621,7 +639,7 @@ def add_backlog(conn: sqlite3.Connection, idea_id: str, summary: str, themes: li
 
 
 def add_clarification(conn: sqlite3.Connection, task_id: str | None, question: str, default: str | None) -> None:
-    with conn:
+    with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO clarifications(task_id, question, default_answer, created_at)
@@ -645,7 +663,7 @@ def list_clarifications(conn: sqlite3.Connection, status_filter: str | None) -> 
 
 def add_principle(conn: sqlite3.Connection, theme: str, principle_id: str, statement: str) -> None:
     raw = {"id": principle_id, "statement": statement, "status": "active", "applies_to": [], "exceptions": []}
-    with conn:
+    with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO principles(id, theme, statement, status, raw_json, updated_at)
@@ -686,7 +704,7 @@ def add_column(
 ) -> None:
     if not name:
         fail("Column name is required")
-    with conn:
+    with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO columns(name, position, description, required_rules_json, direction, active)
@@ -721,7 +739,7 @@ def list_transitions(conn: sqlite3.Connection) -> None:
 def add_transition(conn: sqlite3.Connection, from_column: str, to_column: str, rule: str | None) -> None:
     require_column(conn, from_column)
     require_column(conn, to_column)
-    with conn:
+    with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO column_transitions(from_column, to_column, rule)
