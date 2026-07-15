@@ -67,6 +67,14 @@ Import mechanics:
 - Source skill directories containing `SKILL.md` are copied into `./skills`; destination directories are replaced.
 - If duplicate skill names exist across sources, later iteration order in `Makefile` wins.
 
+## Skill Domain Boundary
+
+This repository should only version skills that support the integrated execution-improvement loop: coordination/delegation, work history capture, reflection, learning classification, backlog synthesis, and evidence-backed method updates.
+
+Before adding or syncing a skill into this repo, verify that it belongs to that loop. Systems engineering, Kubernetes, language/config generation, code style extraction, commit-message quality, OpenAI API usage, plugin authoring, document rendering, image generation, and general marketplace/installer skills belong in separate skill stacks unless they directly support the feedback-loop domain here.
+
+`make import` is intentionally broad: it copies every discovered `SKILL.md` directory from supported local agent homes into `./skills`, replacing same-named directories. Treat imported untracked skill directories as review candidates, not automatically accepted repo content. Remove irrelevant imported directories before staging changes.
+
 ## Example Prompts
 
 Use plain human language to trigger the stack behaviors.
