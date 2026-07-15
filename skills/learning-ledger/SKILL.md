@@ -79,6 +79,48 @@ Expected flow:
 11.5. Validate each compressed 7-day aggregate size is <= 1MB before retention; if not, re-summarize and recompress until within limit.
 12. Expose query paths by time window, checkpoint range, and context track.
 
+## Helper CLI
+
+Use `scripts/ledger.py` from the active project root to maintain project-local
+ledger artifacts under `.learning-ledger/` by default. The helper implements the
+practical core path:
+
+- `append`: write one structured JSON event to `.learning-ledger/raw/YYYY-MM-DD.ndjson`.
+- `list`: query raw and rotated daily events by time, context track, event type,
+  or checkpoint range.
+- `rotate`: deterministically gzip raw daily ledgers into
+  `.learning-ledger/daily/`, enforcing the 1MB compressed artifact cap. If a
+  daily artifact is too large, the helper writes a compacted daily summary with
+  explicit loss-accounting.
+- `aggregate`: build a compressed 7-day aggregate with count summaries,
+  track-aware summaries, source artifact links, high-signal checkpoint chains,
+  and latest-4 aggregate retention.
+- `prune`: enforce raw, daily, and aggregate retention windows.
+
+Examples:
+
+```sh
+skills/learning-ledger/scripts/ledger.py append \
+  --session-id session-001 \
+  --turn-id 1 \
+  --role assistant \
+  --event-type decision \
+  --context-track execution \
+  --classification-basis "implementation checkpoint" \
+  --reason-summary "Chose project-local JSONL ledger storage" \
+  --text "Added the initial ledger event."
+
+skills/learning-ledger/scripts/ledger.py list --track execution --since 2026-07-01
+skills/learning-ledger/scripts/ledger.py rotate --date 2026-07-14
+skills/learning-ledger/scripts/ledger.py aggregate --end-date 2026-07-14
+skills/learning-ledger/scripts/ledger.py prune --raw-days 7 --daily-days 35 --keep-aggregates 4
+```
+
+The CLI is intentionally local and deterministic. It does not perform semantic
+redaction or model-generated summarization; callers must redact event text
+before append. Its compaction fallback preserves counts, source links, and a
+bounded chronological sample so retention stays predictable.
+
 ## Required Deliverables
 
 - Schema definition and usage guidance.
