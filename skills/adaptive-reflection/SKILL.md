@@ -68,6 +68,19 @@ Use the following gates before promoting a lesson into `abstract-method` or crea
 
 If any gate fails, keep the item in `project-context`, defer it, or merge it into an existing skill instead of creating a new one.
 
+Decision precedence:
+
+Apply these rules in order when deciding whether a lesson should update project artifacts, update an existing skill, create a new skill, defer, reject, or remain a hypothesis. Stop at the first rule that decides the outcome.
+
+1. If the lesson is project-specific, keep it in project docs, project backlog, or project process artifacts. Do not update reusable skills with project-only policy, naming, paths, architecture, or local workflow constraints.
+2. If the lesson depends on one noisy incident, defer it until repeated evidence appears through independent evidence points, another queue cycle, or a follow-up observation.
+3. If an existing skill already covers the pattern, update that skill with the smallest clarifying change instead of creating a new skill.
+4. If the lesson would weaken a skill's core purpose, reject it even when it would be locally convenient or reduce immediate effort.
+5. If the lesson is broadly reusable but lacks external support or explicit user confirmation, keep it as an `abstract-method` hypothesis and do not adopt it yet.
+6. If the lesson is reusable, evidence-backed, portable after removing project context, and bounded by clear exclusions, update the smallest relevant skill.
+7. Create a new skill only when the behavior is reusable, materially distinct, repeatedly needed, explicitly confirmed by the user, and would make an existing skill incoherent if merged.
+8. If adoption later increases churn, ambiguity, or rework, deprecate or revert the rule and record the replacement rule or rollback reason.
+
 Anti-drift safeguards:
 
 - Prefer the smallest change that resolves the observed pattern.
@@ -161,6 +174,7 @@ Hard rules:
      - `project-context`,
      - `abstract-method`,
      - or both (as paired deltas).
+   - Apply the decision precedence before selecting the delta type.
    - Update project artifacts only with project-context deltas.
    - Update reusable skills only with abstract-method deltas.
    - Add supporting references (templates/checklists/decision rules) to the matching track.
