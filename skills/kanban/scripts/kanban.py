@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 import time
@@ -111,11 +112,17 @@ DEFAULT_TRANSITIONS = (
     ("Deferred", "Backlog", "deferred work resumed for replanning"),
     ("Deferred", "Ready", "resume condition satisfied and card is pullable"),
 )
+BACKLOG_STATUSES = ("new", "ready", "active", "done", "rejected", "deferred")
 
 
 def fail(message: str, code: int = 2) -> None:
     print(f"FAIL {message}", file=sys.stderr)
     raise SystemExit(code)
+
+
+def require_backlog_status(status: str, context: str = "backlog status") -> None:
+    if status not in BACKLOG_STATUSES:
+        fail(f"Invalid {context} {status}; expected one of {', '.join(BACKLOG_STATUSES)}")
 
 
 def now() -> int:
@@ -130,6 +137,11 @@ def json_loads(value: str | None, default: Any = None) -> Any:
     if value is None or value == "":
         return default
     return json.loads(value)
+
+
+def slugify(value: str, fallback: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug[:80] or fallback
 
 
 def connect(db: Path) -> sqlite3.Connection:
@@ -457,6 +469,137 @@ def upsert_task(conn: sqlite3.Connection, card: dict[str, Any]) -> None:
         )
 
 
+def load_legacy_document(path: Path) -> Any:
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        return json.loads(path.read_text(encoding="utf-8"))
+    if suffix in {".yaml", ".yml"}:
+        try:
+            import yaml  # type: ignore[import-not-found]
+        except ImportError:
+            fail("Reading legacy YAML requires PyYAML; install it or convert the file to JSON first")
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    fail("Legacy import accepts only .yaml, .yml, or .json input files")
+
+
+def normalize_legacy_task(item: Any, default_column: str | None = None) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        fail("Legacy task entries must be mappings")
+    card = dict(item)
+    if "id" not in card and "task_id" in card:
+        card["id"] = card["task_id"]
+    if "goal" not in card:
+        for key in ("summary", "title", "description"):
+            if key in card:
+                card["goal"] = card[key]
+                break
+    if "column" not in card:
+        card["column"] = default_column or card.get("status") or "Backlog"
+    card.setdefault("owner", "unassigned")
+    card.setdefault("themes", [])
+    card.setdefault("dependencies", [])
+    return card
+
+
+def normalize_legacy_backlog_item(item: Any, index: int) -> dict[str, Any]:
+    if isinstance(item, str):
+        summary = item
+        idea_id = slugify(summary, f"legacy-{index}")
+        return {"id": idea_id, "summary": summary, "status": "new", "themes": []}
+    if not isinstance(item, dict):
+        fail("Legacy backlog entries must be strings or mappings")
+    idea = dict(item)
+    summary = str(idea.get("summary") or idea.get("title") or idea.get("goal") or "")
+    if not summary:
+        fail("Legacy backlog entry missing summary/title/goal")
+    idea_id = str(idea.get("id") or idea.get("idea_id") or slugify(summary, f"legacy-{index}"))
+    themes = idea.get("themes") or idea.get("theme") or []
+    if isinstance(themes, str):
+        themes = [themes]
+    idea["id"] = idea_id
+    idea["summary"] = summary
+    idea["status"] = str(idea.get("status") or "new")
+    require_backlog_status(idea["status"], "legacy backlog status")
+    idea["themes"] = [str(theme) for theme in themes]
+    return idea
+
+
+def legacy_task_items(document: Any, conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    if isinstance(document, list):
+        return [normalize_legacy_task(item) for item in document]
+    if not isinstance(document, dict):
+        fail("Legacy task document must be a mapping or list")
+    for key in ("tasks", "cards", "queue"):
+        value = document.get(key)
+        if isinstance(value, list):
+            return [normalize_legacy_task(item) for item in value]
+    items: list[dict[str, Any]] = []
+    columns = set(column_names(conn))
+    for key, value in document.items():
+        if key in columns and isinstance(value, list):
+            items.extend(normalize_legacy_task(item, key) for item in value)
+    if items:
+        return items
+    fail("Legacy task document has no tasks/cards/queue list or column-grouped task lists")
+
+
+def legacy_backlog_items(document: Any) -> list[dict[str, Any]]:
+    source = document
+    if isinstance(document, dict):
+        for key in ("backlog", "ideas", "items"):
+            if isinstance(document.get(key), list):
+                source = document[key]
+                break
+    if not isinstance(source, list):
+        fail("Legacy backlog document must be a list or contain backlog/ideas/items")
+    return [normalize_legacy_backlog_item(item, index) for index, item in enumerate(source, 1)]
+
+
+def upsert_backlog_idea(conn: sqlite3.Connection, idea: dict[str, Any]) -> None:
+    idea_id = str(idea["id"])
+    summary = str(idea["summary"])
+    status = str(idea.get("status") or "new")
+    require_backlog_status(status)
+    themes = [str(theme) for theme in idea.get("themes") or []]
+    conn.execute(
+        """
+        INSERT INTO backlog_ideas(id, summary, status, themes_json, raw_json, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            summary=excluded.summary,
+            status=excluded.status,
+            themes_json=excluded.themes_json,
+            raw_json=excluded.raw_json,
+            updated_at=excluded.updated_at
+        """,
+        (idea_id, summary, status, json_dumps(themes), json_dumps(idea), now()),
+    )
+
+
+def import_legacy(conn: sqlite3.Connection, path: Path, kind: str) -> None:
+    document = load_legacy_document(path)
+    with write_transaction(conn):
+        task_count = 0
+        backlog_count = 0
+        selected_kind = kind
+        if selected_kind == "auto":
+            if isinstance(document, dict) and any(key in document for key in ("backlog", "ideas", "items")):
+                selected_kind = "backlog"
+            else:
+                selected_kind = "tasks"
+        if selected_kind == "tasks":
+            for card in legacy_task_items(document, conn):
+                upsert_task(conn, card)
+                task_count += 1
+        elif selected_kind == "backlog":
+            for idea in legacy_backlog_items(document):
+                upsert_backlog_idea(conn, idea)
+                backlog_count += 1
+        else:
+            fail(f"Unknown legacy import kind: {kind}")
+    print(f"imported tasks={task_count} backlog={backlog_count} from {path}")
+
+
 def list_config(conn: sqlite3.Connection) -> None:
     for row in conn.execute(
         """
@@ -638,6 +781,71 @@ def add_backlog(conn: sqlite3.Connection, idea_id: str, summary: str, themes: li
         )
 
 
+def require_backlog_idea(conn: sqlite3.Connection, idea_id: str) -> sqlite3.Row:
+    row = conn.execute(
+        "SELECT id, summary, status, themes_json, raw_json FROM backlog_ideas WHERE id = ?",
+        (idea_id,),
+    ).fetchone()
+    if row is None:
+        fail(f"Unknown backlog idea: {idea_id}")
+    return row
+
+
+def update_backlog(
+    conn: sqlite3.Connection,
+    idea_id: str,
+    status_value: str | None,
+    summary: str | None,
+    reason: str | None,
+    note: str | None,
+) -> None:
+    if status_value is not None:
+        require_backlog_status(status_value)
+    if summary is not None and not summary.strip():
+        fail("Backlog summary cannot be empty")
+    if status_value in {"done", "rejected", "deferred"} and not reason:
+        fail(f"Backlog status {status_value} requires --reason")
+    with write_transaction(conn):
+        row = require_backlog_idea(conn, idea_id)
+        raw = json_loads(row["raw_json"], {})
+        if not isinstance(raw, dict):
+            raw = {"id": idea_id}
+        new_summary = summary if summary is not None else row["summary"]
+        new_status = status_value if status_value is not None else row["status"]
+        raw["id"] = idea_id
+        raw["summary"] = new_summary
+        raw["status"] = new_status
+        if reason:
+            if new_status == "done":
+                raw["completion"] = reason
+            elif new_status == "rejected":
+                raw["decision"] = reason
+            elif new_status == "deferred":
+                raw["decision"] = reason
+            else:
+                raw["reason"] = reason
+        if note:
+            notes = raw.setdefault("notes", [])
+            if not isinstance(notes, list):
+                notes = [str(notes)]
+                raw["notes"] = notes
+            notes.append({"text": note, "created_at": now()})
+        themes = json_loads(row["themes_json"], [])
+        conn.execute(
+            """
+            UPDATE backlog_ideas
+            SET summary = ?, status = ?, themes_json = ?, raw_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (new_summary, new_status, json_dumps(themes), json_dumps(raw), now(), idea_id),
+        )
+
+
+def show_backlog(conn: sqlite3.Connection, idea_id: str) -> None:
+    row = require_backlog_idea(conn, idea_id)
+    print(json.dumps(json_loads(row["raw_json"], {}), indent=2, sort_keys=True))
+
+
 def add_clarification(conn: sqlite3.Connection, task_id: str | None, question: str, default: str | None) -> None:
     with write_transaction(conn):
         conn.execute(
@@ -784,6 +992,9 @@ def validate_db(conn: sqlite3.Connection) -> None:
             errors.append(f"backfill goal for inactive/unknown column {row['column_name']}")
         if row["target_value"] < 0:
             errors.append(f"{row['column_name']}: backfill goal target must be non-negative")
+    for row in conn.execute("SELECT id, status FROM backlog_ideas"):
+        if row["status"] not in BACKLOG_STATUSES:
+            errors.append(f"{row['id']}: invalid backlog status {row['status']}")
     duplicate_themes = conn.execute(
         """
         SELECT task_id, theme, COUNT(*) AS n
@@ -804,6 +1015,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init")
+
+    p_legacy_import = sub.add_parser(
+        "legacy-import",
+        help="Read a legacy YAML/JSON backlog or queue file and migrate it into SQLite.",
+    )
+    p_legacy_import.add_argument("path", type=Path)
+    p_legacy_import.add_argument("--kind", choices=("auto", "tasks", "backlog"), default="auto")
 
     p_status = sub.add_parser("status")
     p_status.add_argument("--all", action="store_true")
@@ -867,6 +1085,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_backlog_add.add_argument("idea_id")
     p_backlog_add.add_argument("summary")
     p_backlog_add.add_argument("--theme", action="append", default=[])
+    p_backlog_show = backlog_sub.add_parser("show")
+    p_backlog_show.add_argument("idea_id")
+    p_backlog_status = backlog_sub.add_parser("status")
+    p_backlog_status.add_argument("idea_id")
+    p_backlog_status.add_argument("status", choices=BACKLOG_STATUSES)
+    p_backlog_status.add_argument("--reason")
+    p_backlog_status.add_argument("--note")
+    p_backlog_update = backlog_sub.add_parser("update")
+    p_backlog_update.add_argument("idea_id")
+    p_backlog_update.add_argument("--summary")
+    p_backlog_update.add_argument("--status", choices=BACKLOG_STATUSES)
+    p_backlog_update.add_argument("--reason")
+    p_backlog_update.add_argument("--note")
 
     p_clarify = sub.add_parser("clarify")
     clarify_sub = p_clarify.add_subparsers(dest="clarify_cmd", required=True)
@@ -895,6 +1126,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "init":
         print(f"initialized {args.db}")
+    elif args.cmd == "legacy-import":
+        import_legacy(conn, args.path, args.kind)
     elif args.cmd == "status":
         status(conn, args.all)
     elif args.cmd == "validate":
@@ -938,6 +1171,14 @@ def main(argv: list[str] | None = None) -> int:
             list_backlog(conn)
         elif args.backlog_cmd == "add":
             add_backlog(conn, args.idea_id, args.summary, args.theme)
+        elif args.backlog_cmd == "show":
+            show_backlog(conn, args.idea_id)
+        elif args.backlog_cmd == "status":
+            update_backlog(conn, args.idea_id, args.status, None, args.reason, args.note)
+        elif args.backlog_cmd == "update":
+            if args.summary is None and args.status is None and args.reason is None and args.note is None:
+                fail("backlog update requires at least one of --summary, --status, --reason, or --note")
+            update_backlog(conn, args.idea_id, args.status, args.summary, args.reason, args.note)
     elif args.cmd == "clarify":
         if args.clarify_cmd == "add":
             add_clarification(conn, args.task, args.question, args.default)

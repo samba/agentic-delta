@@ -18,7 +18,9 @@ Read the reference that matches the request:
 
 Use `.kanban/kanban.db` as the canonical project-local state. It stores cards, backlog records, clarifications, theme principles, columns, transitions, WIP limits, backfill goals, validation state, and events.
 
-Do not use legacy `.kanban/kanban.yaml` or `.kanban/backlog.yaml` files for import, export, review snapshots, or ongoing state. The SQLite database and helper commands are the only machine-editable board state.
+Do not write YAML for kanban state, backlog output, queue output, exports, review snapshots, or ongoing state. The SQLite database and helper commands are the only machine-editable board state.
+
+Legacy `.kanban/kanban.yaml`, `.kanban/backlog.yaml`, or similar YAML files may be read only for one-way migration into `.kanban/kanban.db`. After migration, continue from SQLite and leave legacy YAML files untouched unless the user explicitly asks to archive or remove them.
 
 If no project kanban state exists, keep planning in-session unless the user asks to persist a board or backlog. When persistence is requested, initialize `.kanban/kanban.db` with the bundled helper.
 
@@ -27,6 +29,9 @@ If no project kanban state exists, keep planning in-session unless the user asks
 Use the bundled helper from this skill:
 
 ```sh
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" init
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" legacy-import .kanban/kanban.yaml --kind tasks
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" legacy-import .kanban/backlog.yaml --kind backlog
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" status
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" validate
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" config list
@@ -35,23 +40,27 @@ python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" column transition list
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task list --column Ready
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task show <task-id>
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task move <task-id> Active --owner <owner>
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog status <idea-id> done --reason "<completion evidence>"
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog update <idea-id> --summary "<revised summary>"
 ```
 
 Supported command groups:
 
 ```text
 init
+legacy-import
 status
 validate
 config list/set
 column list/add/transition
 task list/show/move/validation
-backlog list/add
+backlog list/add/show/status/update
 clarify add/list
 principle add/list
 ```
 
 Prefer the helper for all machine updates so changes are record-scoped and validated.
+Do not update `.kanban/kanban.db` with direct SQL for normal workflow changes; add or use a helper command instead.
 
 ## Columns And Policy
 
@@ -135,3 +144,25 @@ Review
 ```
 
 End with the next pullable card, highest-risk blocker, validation debt, and concise WSJF rationale when recommending work.
+
+## Backlog Decisions
+
+Use `backlog status` for decision-state changes:
+
+```sh
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog status <idea-id> done --reason "<what completed>"
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog status <idea-id> rejected --reason "<why rejected>"
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog status <idea-id> deferred --reason "<resume condition or deferral reason>"
+```
+
+Allowed backlog statuses are `new`, `ready`, `active`, `done`, `rejected`, and
+`deferred`. Statuses `done`, `rejected`, and `deferred` require `--reason` so the
+database keeps completion or decision evidence in the idea's raw JSON record.
+
+Use `backlog update` to revise an idea summary or add notes without changing
+status:
+
+```sh
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog update <idea-id> --summary "<new summary>"
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog update <idea-id> --note "<decision context>"
+```
