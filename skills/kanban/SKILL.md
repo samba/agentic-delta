@@ -1,17 +1,18 @@
 ---
 name: kanban
-description: Use when planning, prioritizing, maintaining project kanban state, walking the board, grooming backlog, persisting plans or theme principles, reporting work status, selecting next tasks by review-first and WSJF discipline, or coordinating delegated/background/parallel work as kanban lanes with WIP limits, backfill goals, readiness gates, explicit validation, and closure proof.
+description: Use when planning, prioritizing, maintaining project kanban state, walking the board, doing a kanban loop, grooming backlog, refining backlog tasks into clearer subtasks, persisting plans or theme principles, reporting work status, selecting next tasks by review-first and WSJF discipline, or coordinating delegated/background/parallel work as kanban lanes with WIP limits, backfill goals, readiness gates, explicit validation, and closure proof.
 ---
 
 # Kanban
 
 ## Use This Skill When
 
-Use this skill for project planning, backlog grooming, work status, next-task selection, board walks, and delegated/background execution. This is the canonical skill for both planning and worker coordination.
+Use this skill for project planning, backlog grooming, work status, next-task selection, board walks, kanban loops, and delegated/background execution. This is the canonical skill for both planning and worker coordination.
 
 Read the reference that matches the request:
 
-- `references/board-walk.md`: when the user says `walk the board`, asks for status/progress, asks what to start next, or asks to backfill Ready/Active work.
+- `references/board-walk.md`: when the user says `walk the board`, `do kanban loop`, asks for status/progress, asks what to start next, or asks to backfill Ready/Active work.
+- `references/backlog-refinement.md`: when the user asks to refine, split, clarify, decompose, groom, or make backlog tasks easier to execute.
 - `references/delegation.md`: when the user asks for async, background, delegated, queued, autonomous, or parallel work.
 
 ## Board State
@@ -40,6 +41,10 @@ python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" column transition list
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task list --column Ready
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task show <task-id>
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task move <task-id> Active --owner <owner>
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task blocker add <task-id> <blocked-by> --reason "<why>"
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task review accept <task-id> --evidence "<proof>"
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog dependency add <idea-id> <dependency-id>
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog priority set <idea-id> --value 10 --reason "<why before other work>"
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog status <idea-id> done --reason "<completion evidence>"
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" backlog update <idea-id> --summary "<revised summary>"
 ```
@@ -54,13 +59,22 @@ validate
 config list/set
 column list/add/transition
 task list/show/move/validation
+task blocker add/remove
+task review start/accept/rework
+task event add
+task metadata add/remove
+task dependency add/remove/list
+task priority set/bump
 backlog list/add/show/status/update
+backlog dependency add/remove/list
+backlog priority set/bump
 clarify add/list
 principle add/list
 ```
 
 Prefer the helper for all machine updates so changes are record-scoped and validated.
 Do not update `.kanban/kanban.db` with direct SQL for normal workflow changes; add or use a helper command instead.
+Use helper verbs such as `add` and `remove` for blockers, dependencies, and metadata instead of editing SQLite directly. Avoid ambiguous words such as `clear` in user-facing workflow commands; remove a specific blocker or metadata key instead.
 
 ## Columns And Policy
 
@@ -76,7 +90,7 @@ The default seeded workflow is:
 - `Done`: accepted work with proof.
 - `Deferred`: intentionally postponed work with a resume condition.
 
-Move cards only through declared transitions. If a project needs a bespoke workflow state, add a column and explicit transitions with promotion rules rather than forcing a card into an undeclared state.
+Move cards only through declared transitions. If a project needs a bespoke workflow state, add a column and explicit transitions with movement rules rather than forcing a card into an undeclared state.
 
 Configure column-scoped limits and goals with:
 
@@ -110,6 +124,20 @@ Keep cards compact and concrete:
 
 Implementation cards must not enter `Active` until confidence and readiness are at least 99% for scope, success criteria, operational constraints/requirements, and implementation plan, with the plan confirmed. Planning, research, clarification, and validation-design cards may run below that threshold when their purpose is to raise readiness.
 
+## Research-First Gates
+
+Front-load research before design or implementation when a change involves sensitive design choices, operational risk, security hazards, privacy controls, or performance-critical tradeoffs. Research should happen early enough to shape the design, not after implementation has created rework pressure.
+
+Create an explicit research or design card before implementation when work includes any of:
+
+- network isolation, VPN, DNS, identity, secrets, credential rotation, backup/restore, or access-control boundaries;
+- production operations, destructive actions, data movement, migrations, failover, disaster recovery, or rollback behavior;
+- privacy-preserving controls, traffic routing, telemetry/logging exposure, or compliance-sensitive behavior;
+- performance, scalability, storage, scheduling, or reliability choices where multiple architecture patterns are plausible;
+- new infrastructure primitives whose failure modes are not already proven in this project.
+
+Research cards should identify authoritative sources, candidate patterns, failure modes, validation implications, and the recommended contract. Their completion evidence must persist the findings, the conclusion, and the design/implementation choices that follow from it, so downstream cards can cite concrete evidence instead of repeating the research. Downstream planning must depend on that research when its answer materially affects scope or safety.
+
 ## Priority Discipline
 
 Use this pull order for recommendations and autonomous coordination:
@@ -118,7 +146,7 @@ Use this pull order for recommendations and autonomous coordination:
 2. Advance already-started `Active` items.
 3. Clear blockers when doing so unblocks reviewable or active work.
 4. Pull from `Ready`.
-5. Promote or start new backlog work only after earlier classes are exhausted, blocked, or intentionally deferred.
+5. Refine or start new backlog work only after earlier classes are exhausted, blocked, or intentionally deferred.
 
 Within the same pull class, use weighted shortest job first: prefer the highest value output per unit effort cost. Estimate value from user-visible benefit, risk reduction, dependency unblock value, validation debt reduction, and theme progress. Estimate effort from file scope, complexity, validation cost, coordination cost, and uncertainty.
 

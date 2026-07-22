@@ -378,6 +378,56 @@ def transition_allowed(conn: sqlite3.Connection, from_column: str, to_column: st
     return row is not None
 
 
+def task_exists(conn: sqlite3.Connection, task_id: str) -> bool:
+    row = conn.execute("SELECT 1 FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    return row is not None
+
+
+def backlog_exists(conn: sqlite3.Connection, idea_id: str) -> bool:
+    row = conn.execute("SELECT 1 FROM backlog_ideas WHERE id = ?", (idea_id,)).fetchone()
+    return row is not None
+
+
+def dependency_state(conn: sqlite3.Connection, dependency: str) -> tuple[str, str] | None:
+    task = conn.execute(
+        "SELECT column_name FROM tasks WHERE id = ?",
+        (dependency,),
+    ).fetchone()
+    if task is not None:
+        return ("task", task["column_name"])
+    idea = conn.execute(
+        "SELECT status FROM backlog_ideas WHERE id = ?",
+        (dependency,),
+    ).fetchone()
+    if idea is not None:
+        return ("backlog", idea["status"] or "")
+    return None
+
+
+def dependency_resolved(kind: str, state: str) -> bool:
+    if kind == "task":
+        return state == "Done"
+    if kind == "backlog":
+        return state == "done"
+    return False
+
+
+def unresolved_dependencies(conn: sqlite3.Connection, task_id: str) -> list[str]:
+    unresolved: list[str] = []
+    for row in conn.execute(
+        "SELECT dependency FROM task_dependencies WHERE task_id = ? ORDER BY dependency",
+        (task_id,),
+    ):
+        dependency = row["dependency"]
+        state = dependency_state(conn, dependency)
+        if state is None:
+            continue
+        kind, status = state
+        if not dependency_resolved(kind, status):
+            unresolved.append(f"{dependency} ({kind}:{status})")
+    return unresolved
+
+
 def scalar_text(value: Any) -> str | None:
     if value is None:
         return None
@@ -680,6 +730,10 @@ def task_move(conn: sqlite3.Connection, task_id: str, column: str, owner: str | 
             rules = column_rules(conn, column)
             suffix = f"; {column} requires: {', '.join(rules)}" if rules else ""
             fail(f"Transition not allowed: {from_column} -> {column}{suffix}")
+        if column == "Active":
+            blocked_by = unresolved_dependencies(conn, task_id)
+            if blocked_by:
+                fail("Cannot move to Active; unresolved dependencies: " + ", ".join(blocked_by))
         card = json_loads(row["raw_json"])
         card["column"] = column
         if owner is not None:
@@ -706,6 +760,236 @@ def task_set_validation(conn: sqlite3.Connection, task_id: str, status: str, evi
             items.append(evidence)
 
     update_task_raw(conn, task_id, mutate)
+
+
+def append_unique(values: Any, item: str) -> list[str]:
+    if values is None:
+        items: list[str] = []
+    elif isinstance(values, list):
+        items = [str(value) for value in values]
+    else:
+        items = [str(values)]
+    if item not in items:
+        items.append(item)
+    return items
+
+
+def add_task_event(conn: sqlite3.Connection, task_id: str | None, event_type: str, message: str) -> None:
+    if task_id is not None and not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+    with write_transaction(conn):
+        conn.execute(
+            "INSERT INTO task_events(task_id, event_type, message, created_at) VALUES(?, ?, ?, ?)",
+            (task_id, event_type, message, now()),
+        )
+
+
+def task_add_blocker(conn: sqlite3.Connection, task_id: str, blocked_by: str, reason: str | None) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+
+    def mutate(card: dict[str, Any]) -> None:
+        blocker = card.get("blocker")
+        if not isinstance(blocker, dict):
+            blocker = {}
+            card["blocker"] = blocker
+        blocker["blocked_by"] = append_unique(blocker.get("blocked_by"), blocked_by)
+        if reason:
+            reasons = blocker.setdefault("reasons", {})
+            if not isinstance(reasons, dict):
+                reasons = {}
+                blocker["reasons"] = reasons
+            reasons[blocked_by] = reason
+        card["blocked_by"] = append_unique(card.get("blocked_by"), blocked_by)
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "blocker.add", f"blocked by {blocked_by}" + (f": {reason}" if reason else ""))
+
+
+def task_remove_blocker(conn: sqlite3.Connection, task_id: str, blocked_by: str) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+
+    def mutate(card: dict[str, Any]) -> None:
+        blocker = card.get("blocker")
+        if isinstance(blocker, dict):
+            blocked_by_values = [item for item in append_unique(blocker.get("blocked_by"), "") if item and item != blocked_by]
+            if blocked_by_values:
+                blocker["blocked_by"] = blocked_by_values
+            else:
+                blocker.pop("blocked_by", None)
+            reasons = blocker.get("reasons")
+            if isinstance(reasons, dict):
+                reasons.pop(blocked_by, None)
+                if not reasons:
+                    blocker.pop("reasons", None)
+            if not blocker:
+                card["blocker"] = None
+        card_blocked_by = [item for item in append_unique(card.get("blocked_by"), "") if item and item != blocked_by]
+        if card_blocked_by:
+            card["blocked_by"] = card_blocked_by
+        else:
+            card.pop("blocked_by", None)
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "blocker.remove", f"removed blocker {blocked_by}")
+
+
+def task_add_metadata(conn: sqlite3.Connection, task_id: str, key: str, value: str) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+    try:
+        parsed_value: Any = json.loads(value)
+    except json.JSONDecodeError:
+        parsed_value = value
+
+    def mutate(card: dict[str, Any]) -> None:
+        card[key] = parsed_value
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "metadata.add", f"set {key}")
+
+
+def task_remove_metadata(conn: sqlite3.Connection, task_id: str, key: str) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+
+    def mutate(card: dict[str, Any]) -> None:
+        card.pop(key, None)
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "metadata.remove", f"removed {key}")
+
+
+def task_review_start(conn: sqlite3.Connection, task_id: str, worker: str, agent_id: str | None, note: str | None) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+
+    def mutate(card: dict[str, Any]) -> None:
+        card["review_worker"] = worker
+        if agent_id:
+            card["review_worker_agent_id"] = agent_id
+        card["review_status"] = "in_progress"
+        card.pop("review_recommendation", None)
+        if note:
+            card["review_note"] = note
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "review.started", f"review started by {worker}" + (f": {note}" if note else ""))
+
+
+def task_review_accept(conn: sqlite3.Connection, task_id: str, worker: str | None, agent_id: str | None, evidence: list[str]) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+
+    def mutate(card: dict[str, Any]) -> None:
+        if worker:
+            card["review_worker"] = worker
+        if agent_id:
+            card["review_worker_agent_id"] = agent_id
+        card["review_status"] = "done"
+        card["review_recommendation"] = "Done"
+        if evidence:
+            notes = card.setdefault("review_notes", [])
+            if not isinstance(notes, list):
+                notes = [str(notes)]
+                card["review_notes"] = notes
+            notes.extend(evidence)
+        validation = card.setdefault("validation", {})
+        if isinstance(validation, dict):
+            validation["status"] = "pass"
+            if evidence:
+                items = validation.setdefault("evidence", [])
+                if not isinstance(items, list):
+                    items = [str(items)]
+                    validation["evidence"] = items
+                items.extend(evidence)
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "review.accepted", "independent review accepted task")
+
+
+def task_review_rework(conn: sqlite3.Connection, task_id: str, worker: str | None, agent_id: str | None, finding: list[str]) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+
+    def mutate(card: dict[str, Any]) -> None:
+        if worker:
+            card["review_worker"] = worker
+        if agent_id:
+            card["review_worker_agent_id"] = agent_id
+        card["review_status"] = "needs_rework"
+        card["review_recommendation"] = "Rework"
+        if finding:
+            items = card.setdefault("rework_needed", [])
+            if not isinstance(items, list):
+                items = [str(items)]
+                card["rework_needed"] = items
+            items.extend(finding)
+        validation = card.setdefault("validation", {})
+        if isinstance(validation, dict):
+            validation["status"] = "needs_rework"
+            if finding:
+                items = validation.setdefault("evidence", [])
+                if not isinstance(items, list):
+                    items = [str(items)]
+                    validation["evidence"] = items
+                items.extend(finding)
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "review.rework", "independent review requested rework")
+
+
+def task_add_dependency(conn: sqlite3.Connection, task_id: str, dependency: str) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+    if dependency == task_id:
+        fail("Task cannot depend on itself")
+    with write_transaction(conn):
+        row = conn.execute("SELECT raw_json FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        card = json_loads(row["raw_json"])
+        dependencies = card.setdefault("dependencies", [])
+        if not isinstance(dependencies, list):
+            dependencies = [str(dependencies)]
+            card["dependencies"] = dependencies
+        if dependency not in [str(item) for item in dependencies]:
+            dependencies.append(dependency)
+        upsert_task(conn, card)
+        conn.execute(
+            "INSERT INTO task_events(task_id, event_type, message, created_at) VALUES(?, ?, ?, ?)",
+            (task_id, "dependency.add", f"blocked by {dependency}", now()),
+        )
+
+
+def task_remove_dependency(conn: sqlite3.Connection, task_id: str, dependency: str) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+
+    def mutate(card: dict[str, Any]) -> None:
+        dependencies = card.get("dependencies") or []
+        if not isinstance(dependencies, list):
+            dependencies = [str(dependencies)]
+        card["dependencies"] = [str(item) for item in dependencies if str(item) != dependency]
+
+    update_task_raw(conn, task_id, mutate)
+    add_task_event(conn, task_id, "dependency.remove", f"removed dependency {dependency}")
+
+
+def task_list_dependencies(conn: sqlite3.Connection, task_id: str) -> None:
+    if not task_exists(conn, task_id):
+        fail(f"Unknown task: {task_id}")
+    for row in conn.execute(
+        "SELECT dependency FROM task_dependencies WHERE task_id = ? ORDER BY dependency",
+        (task_id,),
+    ):
+        dependency = row["dependency"]
+        state = dependency_state(conn, dependency)
+        if state is None:
+            print(f"{dependency}\treference\tnon-blocking")
+            continue
+        kind, status = state
+        resolved = "resolved" if dependency_resolved(kind, status) else "unresolved"
+        print(f"{dependency}\t{kind}:{status}\t{resolved}")
 
 
 def status(conn: sqlite3.Connection, show_all: bool) -> None:
@@ -770,12 +1054,17 @@ def list_backlog(conn: sqlite3.Connection) -> None:
 
 
 def add_backlog(conn: sqlite3.Connection, idea_id: str, summary: str, themes: list[str]) -> None:
-    idea = {"id": idea_id, "summary": summary, "themes": themes, "status": "new"}
+    idea = {"id": idea_id, "summary": summary, "themes": themes, "status": "new", "dependencies": []}
     with write_transaction(conn):
         conn.execute(
             """
             INSERT INTO backlog_ideas(id, summary, status, themes_json, raw_json, updated_at)
             VALUES(?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                summary=excluded.summary,
+                themes_json=excluded.themes_json,
+                raw_json=excluded.raw_json,
+                updated_at=excluded.updated_at
             """,
             (idea_id, summary, "new", json_dumps(themes), json_dumps(idea), now()),
         )
@@ -844,6 +1133,125 @@ def update_backlog(
 def show_backlog(conn: sqlite3.Connection, idea_id: str) -> None:
     row = require_backlog_idea(conn, idea_id)
     print(json.dumps(json_loads(row["raw_json"], {}), indent=2, sort_keys=True))
+
+
+def backlog_update_raw(conn: sqlite3.Connection, idea_id: str, mutate: Any) -> None:
+    with write_transaction(conn):
+        row = require_backlog_idea(conn, idea_id)
+        idea = json_loads(row["raw_json"], {})
+        if not isinstance(idea, dict):
+            idea = {"id": idea_id}
+        mutate(idea)
+        status = str(idea.get("status") or row["status"] or "new")
+        require_backlog_status(status)
+        summary = scalar_text(idea.get("summary")) or row["summary"]
+        themes = idea.get("themes") or json_loads(row["themes_json"], [])
+        if not isinstance(themes, list):
+            themes = [str(themes)]
+        conn.execute(
+            """
+            UPDATE backlog_ideas
+            SET summary = ?, status = ?, themes_json = ?, raw_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (summary, status, json_dumps(themes), json_dumps(idea), now(), idea_id),
+        )
+
+
+def backlog_add_dependency(conn: sqlite3.Connection, idea_id: str, dependency: str) -> None:
+    if not backlog_exists(conn, idea_id):
+        fail(f"Unknown backlog idea: {idea_id}")
+    if dependency == idea_id:
+        fail("Backlog idea cannot depend on itself")
+
+    def mutate(idea: dict[str, Any]) -> None:
+        dependencies = idea.setdefault("dependencies", [])
+        if not isinstance(dependencies, list):
+            dependencies = [str(dependencies)]
+            idea["dependencies"] = dependencies
+        if dependency not in [str(item) for item in dependencies]:
+            dependencies.append(dependency)
+
+    backlog_update_raw(conn, idea_id, mutate)
+
+
+def backlog_remove_dependency(conn: sqlite3.Connection, idea_id: str, dependency: str) -> None:
+    def mutate(idea: dict[str, Any]) -> None:
+        dependencies = idea.get("dependencies") or []
+        if not isinstance(dependencies, list):
+            dependencies = [str(dependencies)]
+        idea["dependencies"] = [str(item) for item in dependencies if str(item) != dependency]
+
+    backlog_update_raw(conn, idea_id, mutate)
+
+
+def backlog_list_dependencies(conn: sqlite3.Connection, idea_id: str) -> None:
+    row = require_backlog_idea(conn, idea_id)
+    idea = json_loads(row["raw_json"], {})
+    for dependency in idea.get("dependencies") or []:
+        dependency = str(dependency)
+        state = dependency_state(conn, dependency)
+        if state is None:
+            print(f"{dependency}\treference\tnon-blocking")
+            continue
+        kind, status = state
+        resolved = "resolved" if dependency_resolved(kind, status) else "unresolved"
+        print(f"{dependency}\t{kind}:{status}\t{resolved}")
+
+
+def set_priority(raw: dict[str, Any], value: int, reason: str) -> None:
+    raw["priority_rank"] = value
+    raw["priority"] = f"rank {value}: {reason}"
+    history = raw.setdefault("priority_history", [])
+    if not isinstance(history, list):
+        history = [str(history)]
+        raw["priority_history"] = history
+    history.append({"rank": value, "reason": reason, "created_at": now()})
+
+
+def backlog_set_priority(conn: sqlite3.Connection, idea_id: str, value: int, reason: str) -> None:
+    if value < 0:
+        fail("Priority value must be non-negative")
+    row = require_backlog_idea(conn, idea_id)
+    if row["status"] not in {"new", "ready"}:
+        fail("Backlog priority can only be changed for new or ready ideas")
+
+    def mutate(idea: dict[str, Any]) -> None:
+        set_priority(idea, value, reason)
+
+    backlog_update_raw(conn, idea_id, mutate)
+
+
+def backlog_bump_priority(conn: sqlite3.Connection, idea_id: str, reason: str) -> None:
+    row = require_backlog_idea(conn, idea_id)
+    raw = json_loads(row["raw_json"], {})
+    current = raw.get("priority_rank")
+    value = int(current) - 1 if isinstance(current, int) and current > 0 else 0
+    backlog_set_priority(conn, idea_id, value, reason)
+
+
+def task_set_priority(conn: sqlite3.Connection, task_id: str, value: int, reason: str) -> None:
+    if value < 0:
+        fail("Priority value must be non-negative")
+    with write_transaction(conn):
+        row = conn.execute("SELECT column_name, raw_json FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            fail(f"Unknown task: {task_id}")
+        if row["column_name"] != "Ready":
+            fail("Task priority can only be changed for Ready tasks")
+        card = json_loads(row["raw_json"])
+        set_priority(card, value, reason)
+        upsert_task(conn, card)
+
+
+def task_bump_priority(conn: sqlite3.Connection, task_id: str, reason: str) -> None:
+    row = conn.execute("SELECT raw_json FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if row is None:
+        fail(f"Unknown task: {task_id}")
+    raw = json_loads(row["raw_json"], {})
+    current = raw.get("priority_rank")
+    value = int(current) - 1 if isinstance(current, int) and current > 0 else 0
+    task_set_priority(conn, task_id, value, reason)
 
 
 def add_clarification(conn: sqlite3.Connection, task_id: str | None, question: str, default: str | None) -> None:
@@ -1056,6 +1464,66 @@ def build_parser() -> argparse.ArgumentParser:
     p_task_validation.add_argument("task_id")
     p_task_validation.add_argument("status")
     p_task_validation.add_argument("--evidence")
+    p_task_blocker = task_sub.add_parser("blocker")
+    task_blocker_sub = p_task_blocker.add_subparsers(dest="task_blocker_cmd", required=True)
+    p_task_blocker_add = task_blocker_sub.add_parser("add")
+    p_task_blocker_add.add_argument("task_id")
+    p_task_blocker_add.add_argument("blocked_by")
+    p_task_blocker_add.add_argument("--reason")
+    p_task_blocker_remove = task_blocker_sub.add_parser("remove")
+    p_task_blocker_remove.add_argument("task_id")
+    p_task_blocker_remove.add_argument("blocked_by")
+    p_task_review = task_sub.add_parser("review")
+    task_review_sub = p_task_review.add_subparsers(dest="task_review_cmd", required=True)
+    p_task_review_start = task_review_sub.add_parser("start")
+    p_task_review_start.add_argument("task_id")
+    p_task_review_start.add_argument("--worker", required=True)
+    p_task_review_start.add_argument("--agent-id")
+    p_task_review_start.add_argument("--note")
+    p_task_review_accept = task_review_sub.add_parser("accept")
+    p_task_review_accept.add_argument("task_id")
+    p_task_review_accept.add_argument("--worker")
+    p_task_review_accept.add_argument("--agent-id")
+    p_task_review_accept.add_argument("--evidence", action="append", default=[])
+    p_task_review_rework = task_review_sub.add_parser("rework")
+    p_task_review_rework.add_argument("task_id")
+    p_task_review_rework.add_argument("--worker")
+    p_task_review_rework.add_argument("--agent-id")
+    p_task_review_rework.add_argument("--finding", action="append", default=[])
+    p_task_event = task_sub.add_parser("event")
+    task_event_sub = p_task_event.add_subparsers(dest="task_event_cmd", required=True)
+    p_task_event_add = task_event_sub.add_parser("add")
+    p_task_event_add.add_argument("task_id")
+    p_task_event_add.add_argument("--type", required=True)
+    p_task_event_add.add_argument("--message", required=True)
+    p_task_metadata = task_sub.add_parser("metadata")
+    task_metadata_sub = p_task_metadata.add_subparsers(dest="task_metadata_cmd", required=True)
+    p_task_metadata_add = task_metadata_sub.add_parser("add")
+    p_task_metadata_add.add_argument("task_id")
+    p_task_metadata_add.add_argument("key")
+    p_task_metadata_add.add_argument("value")
+    p_task_metadata_remove = task_metadata_sub.add_parser("remove")
+    p_task_metadata_remove.add_argument("task_id")
+    p_task_metadata_remove.add_argument("key")
+    p_task_dependency = task_sub.add_parser("dependency")
+    task_dependency_sub = p_task_dependency.add_subparsers(dest="task_dependency_cmd", required=True)
+    p_task_dependency_add = task_dependency_sub.add_parser("add")
+    p_task_dependency_add.add_argument("task_id")
+    p_task_dependency_add.add_argument("dependency")
+    p_task_dependency_remove = task_dependency_sub.add_parser("remove")
+    p_task_dependency_remove.add_argument("task_id")
+    p_task_dependency_remove.add_argument("dependency")
+    p_task_dependency_list = task_dependency_sub.add_parser("list")
+    p_task_dependency_list.add_argument("task_id")
+    p_task_priority = task_sub.add_parser("priority")
+    task_priority_sub = p_task_priority.add_subparsers(dest="task_priority_cmd", required=True)
+    p_task_priority_set = task_priority_sub.add_parser("set")
+    p_task_priority_set.add_argument("task_id")
+    p_task_priority_set.add_argument("--value", required=True, type=int)
+    p_task_priority_set.add_argument("--reason", required=True)
+    p_task_priority_bump = task_priority_sub.add_parser("bump")
+    p_task_priority_bump.add_argument("task_id")
+    p_task_priority_bump.add_argument("--reason", required=True)
 
     p_column = sub.add_parser("column")
     column_sub = p_column.add_subparsers(dest="column_cmd", required=True)
@@ -1098,6 +1566,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_backlog_update.add_argument("--status", choices=BACKLOG_STATUSES)
     p_backlog_update.add_argument("--reason")
     p_backlog_update.add_argument("--note")
+    p_backlog_dependency = backlog_sub.add_parser("dependency")
+    backlog_dependency_sub = p_backlog_dependency.add_subparsers(dest="backlog_dependency_cmd", required=True)
+    p_backlog_dependency_add = backlog_dependency_sub.add_parser("add")
+    p_backlog_dependency_add.add_argument("idea_id")
+    p_backlog_dependency_add.add_argument("dependency")
+    p_backlog_dependency_remove = backlog_dependency_sub.add_parser("remove")
+    p_backlog_dependency_remove.add_argument("idea_id")
+    p_backlog_dependency_remove.add_argument("dependency")
+    p_backlog_dependency_list = backlog_dependency_sub.add_parser("list")
+    p_backlog_dependency_list.add_argument("idea_id")
+    p_backlog_priority = backlog_sub.add_parser("priority")
+    backlog_priority_sub = p_backlog_priority.add_subparsers(dest="backlog_priority_cmd", required=True)
+    p_backlog_priority_set = backlog_priority_sub.add_parser("set")
+    p_backlog_priority_set.add_argument("idea_id")
+    p_backlog_priority_set.add_argument("--value", required=True, type=int)
+    p_backlog_priority_set.add_argument("--reason", required=True)
+    p_backlog_priority_bump = backlog_priority_sub.add_parser("bump")
+    p_backlog_priority_bump.add_argument("idea_id")
+    p_backlog_priority_bump.add_argument("--reason", required=True)
 
     p_clarify = sub.add_parser("clarify")
     clarify_sub = p_clarify.add_subparsers(dest="clarify_cmd", required=True)
@@ -1149,6 +1636,38 @@ def main(argv: list[str] | None = None) -> int:
             task_move(conn, args.task_id, args.column, args.owner)
         elif args.task_cmd == "validation":
             task_set_validation(conn, args.task_id, args.status, args.evidence)
+        elif args.task_cmd == "blocker":
+            if args.task_blocker_cmd == "add":
+                task_add_blocker(conn, args.task_id, args.blocked_by, args.reason)
+            elif args.task_blocker_cmd == "remove":
+                task_remove_blocker(conn, args.task_id, args.blocked_by)
+        elif args.task_cmd == "review":
+            if args.task_review_cmd == "start":
+                task_review_start(conn, args.task_id, args.worker, args.agent_id, args.note)
+            elif args.task_review_cmd == "accept":
+                task_review_accept(conn, args.task_id, args.worker, args.agent_id, args.evidence)
+            elif args.task_review_cmd == "rework":
+                task_review_rework(conn, args.task_id, args.worker, args.agent_id, args.finding)
+        elif args.task_cmd == "event":
+            if args.task_event_cmd == "add":
+                add_task_event(conn, args.task_id, args.type, args.message)
+        elif args.task_cmd == "metadata":
+            if args.task_metadata_cmd == "add":
+                task_add_metadata(conn, args.task_id, args.key, args.value)
+            elif args.task_metadata_cmd == "remove":
+                task_remove_metadata(conn, args.task_id, args.key)
+        elif args.task_cmd == "dependency":
+            if args.task_dependency_cmd == "add":
+                task_add_dependency(conn, args.task_id, args.dependency)
+            elif args.task_dependency_cmd == "remove":
+                task_remove_dependency(conn, args.task_id, args.dependency)
+            elif args.task_dependency_cmd == "list":
+                task_list_dependencies(conn, args.task_id)
+        elif args.task_cmd == "priority":
+            if args.task_priority_cmd == "set":
+                task_set_priority(conn, args.task_id, args.value, args.reason)
+            elif args.task_priority_cmd == "bump":
+                task_bump_priority(conn, args.task_id, args.reason)
     elif args.cmd == "column":
         if args.column_cmd == "list":
             list_columns(conn)
@@ -1179,6 +1698,18 @@ def main(argv: list[str] | None = None) -> int:
             if args.summary is None and args.status is None and args.reason is None and args.note is None:
                 fail("backlog update requires at least one of --summary, --status, --reason, or --note")
             update_backlog(conn, args.idea_id, args.status, args.summary, args.reason, args.note)
+        elif args.backlog_cmd == "dependency":
+            if args.backlog_dependency_cmd == "add":
+                backlog_add_dependency(conn, args.idea_id, args.dependency)
+            elif args.backlog_dependency_cmd == "remove":
+                backlog_remove_dependency(conn, args.idea_id, args.dependency)
+            elif args.backlog_dependency_cmd == "list":
+                backlog_list_dependencies(conn, args.idea_id)
+        elif args.backlog_cmd == "priority":
+            if args.backlog_priority_cmd == "set":
+                backlog_set_priority(conn, args.idea_id, args.value, args.reason)
+            elif args.backlog_priority_cmd == "bump":
+                backlog_bump_priority(conn, args.idea_id, args.reason)
     elif args.cmd == "clarify":
         if args.clarify_cmd == "add":
             add_clarification(conn, args.task, args.question, args.default)

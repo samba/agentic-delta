@@ -16,6 +16,8 @@ Before the first return, do only enough to queue work safely:
 
 Move deep analysis, research, decomposition, and implementation-path selection into background cards. Do not ask clarifying questions before the first return unless the request is impossible or unsafe to queue without the answer.
 
+When the delegated objective involves operational risk, security hazards, privacy controls, performance-sensitive architecture, data movement, backup/restore, network isolation, identity, or secrets, dispatch a research or design lane before implementation lanes. Implementation should wait until research has identified proven patterns, failure modes, validation requirements, and the recommended contract. Research lane completion must persist findings, conclusions, and design/implementation implications as evidence for downstream lanes.
+
 The first response should name queued/active card ids, what is running, known blockers, and when the coordinator will report back or ask questions.
 
 ## Lane Types
@@ -38,11 +40,12 @@ When a task is first delegated:
 1. Restate the goal as one sentence.
 2. Load project kanban state when present.
 3. Create the minimum coordinator, research, or planning cards needed to reason safely.
-4. Dispatch background lanes and return foreground control within 1 minute.
-5. In background, research proven options before expanding implementation.
-6. Score complexity and ambiguity, then choose lane rigor.
-7. Run the coupling preflight and define ownership boundaries.
-8. Pull only ready cards into Active, respecting WIP limits and backfill goals.
+4. If the work has sensitive operational, security, privacy, or performance tradeoffs, create a research-first prerequisite and do not queue implementation ahead of it.
+5. Dispatch background lanes and return foreground control within 1 minute.
+6. In background, research proven options before expanding implementation.
+7. Score complexity and ambiguity, then choose lane rigor.
+8. Run the coupling preflight and define ownership boundaries.
+9. Pull only ready cards into Active, respecting WIP limits and backfill goals.
 
 ## Lane Contract
 

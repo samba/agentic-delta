@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
     PRIMARY KEY (task_id, dependency)
 );
 
+CREATE INDEX IF NOT EXISTS task_dependencies_dependency_idx ON task_dependencies(dependency);
+
 CREATE TABLE IF NOT EXISTS task_events (
     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
