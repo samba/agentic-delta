@@ -1068,6 +1068,70 @@ def show_task(conn: sqlite3.Connection, task_id: str) -> None:
     print(json.dumps(json_loads(row["raw_json"]), indent=2, sort_keys=True))
 
 
+def add_task(
+    conn: sqlite3.Connection,
+    task_id: str,
+    goal: str,
+    column: str,
+    owner: str,
+    scope: str | None,
+    themes: list[str],
+    dependencies: list[str],
+    intent_links: list[str],
+    exit_criteria: list[str],
+    validation: list[str],
+    plan: str | None,
+) -> None:
+    require_column(conn, column)
+    if not task_id.strip() or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", task_id):
+        fail("Task id must contain lowercase letters, digits, and hyphens")
+    if not goal.strip():
+        fail("Task goal cannot be empty")
+    if not owner.strip():
+        fail("Task owner cannot be empty")
+    if not intent_links:
+        fail("Task creation requires at least one intent link")
+    if any(conn.execute("SELECT 1 FROM intents WHERE id = ?", (intent_id,)).fetchone() is None for intent_id in intent_links):
+        fail("All task intent links must reference existing intents")
+    if task_exists(conn, task_id):
+        fail(f"Task already exists: {task_id}")
+
+    card: dict[str, Any] = {
+        "id": task_id,
+        "column": column,
+        "owner": owner,
+        "scope": scope or "",
+        "goal": goal,
+        "themes": themes,
+        "dependencies": dependencies,
+        "intent_links": intent_links,
+        "exit_criteria": exit_criteria,
+        "validation": {"required": validation, "status": "not_started"},
+        "plan": {"summary": plan} if plan else {},
+        "blocker": "none",
+    }
+    if column == "Ready":
+        if owner == "unassigned":
+            fail("Ready task requires an assigned worker")
+        required = {"scope": card["scope"], "exit_criteria": exit_criteria, "validation": validation}
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            fail("Ready task requires: " + ", ".join(missing))
+
+    with write_transaction(conn):
+        upsert_task(conn, card)
+        for intent_id in intent_links:
+            conn.execute(
+                "INSERT OR IGNORE INTO intent_work_links(intent_id, task_id) VALUES(?, ?)",
+                (intent_id, task_id),
+            )
+        conn.execute(
+            "INSERT INTO task_events(task_id, event_type, message, created_at) VALUES(?, ?, ?, ?)",
+            (task_id, "created", "Created with task add", now()),
+        )
+    print(f"created task {task_id}")
+
+
 def list_backlog(conn: sqlite3.Connection) -> None:
     for row in conn.execute("SELECT id, summary, status FROM backlog_ideas ORDER BY id"):
         status = row["status"] or ""
@@ -1630,6 +1694,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_task_list.add_argument("--theme")
     p_task_show = task_sub.add_parser("show")
     p_task_show.add_argument("task_id")
+    p_task_add = task_sub.add_parser(
+        "add",
+        help="Create an executable task and link it to one or more existing intents.",
+    )
+    p_task_add.add_argument("task_id")
+    p_task_add.add_argument("goal")
+    p_task_add.add_argument("--column", default="Backlog")
+    p_task_add.add_argument("--owner", default="unassigned")
+    p_task_add.add_argument("--scope")
+    p_task_add.add_argument("--theme", action="append", default=[])
+    p_task_add.add_argument("--dependency", action="append", default=[])
+    p_task_add.add_argument("--intent", action="append", required=True)
+    p_task_add.add_argument("--exit-criterion", action="append", default=[])
+    p_task_add.add_argument("--validation", action="append", default=[])
+    p_task_add.add_argument("--plan")
     p_task_move = task_sub.add_parser("move")
     p_task_move.add_argument("task_id")
     p_task_move.add_argument("column")
@@ -1846,7 +1925,22 @@ def main(argv: list[str] | None = None) -> int:
             elif args.config_set_cmd == "backfill_goal":
                 set_backfill_goal(conn, args.column, args.target, args.description)
     elif args.cmd == "task":
-        if args.task_cmd == "list":
+        if args.task_cmd == "add":
+            add_task(
+                conn,
+                args.task_id,
+                args.goal,
+                args.column,
+                args.owner,
+                args.scope,
+                args.theme,
+                args.dependency,
+                args.intent,
+                args.exit_criterion,
+                args.validation,
+                args.plan,
+            )
+        elif args.task_cmd == "list":
             list_tasks(conn, args.column, args.theme)
         elif args.task_cmd == "show":
             show_task(conn, args.task_id)
