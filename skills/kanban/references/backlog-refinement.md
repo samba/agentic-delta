@@ -1,10 +1,10 @@
-# Backlog Refinement
+# Intent And Work-Item Refinement
 
-Use this workflow when the user asks to refine the backlog, split scope, clarify tasks, decompose complex work, improve execution readiness, or identify blockers caused by vague backlog items.
+Use this workflow when the user asks to refine an intent, split scope, clarify tasks, decompose complex work, improve execution readiness, or identify blockers caused by vague candidate work.
 
 ## Goal
 
-Turn broad backlog records into smaller executable units with explicit:
+Turn broad intents into clear plans and smaller executable work items with explicit:
 
 - scope
 - dependencies
@@ -12,19 +12,21 @@ Turn broad backlog records into smaller executable units with explicit:
 - constraints
 - success criteria
 - validation
-- ownership boundaries
+- worker assignment boundaries
+- integration paths
+- documented decisions for human review
 
 Do not start implementation during refinement unless the user explicitly asks.
 
 ## Workflow
 
 1. **Inventory current flow state**
-   - List `Review`, `Active`, `Ready`, and backlog records.
+   - List `Review`, `Active`, `Ready`, and intents.
    - Respect WIP limits and existing Active work.
    - Prefer refining items that unblock Active/Ready work or near-term dependency chains.
 
 2. **Find refinement candidates**
-   Mark a backlog item for splitting when it has any of:
+   Mark an intent or work item for splitting when it has any of:
    - multiple deliverables in one summary
    - unclear validation surface
    - mixed implementation and evaluation work
@@ -33,6 +35,8 @@ Do not start implementation during refinement unless the user explicitly asks.
    - overlapping scope with another backlog item
    - high ambiguity or high complexity
    - likely parallel lanes with disjoint file ownership
+   - unclear producer/consumer handoff between components, generated artifacts,
+     runtime state, external services, or validation evidence
 
    Split out a research-first prerequisite before implementation when the work
    has sensitive design choices or failure modes around operations, security,
@@ -42,6 +46,12 @@ Do not start implementation during refinement unless the user explicitly asks.
    depend on it when its answer changes the safe approach. Its exit criteria
    must require persisted findings, conclusions, and design/implementation
    implications that downstream cards can cite as evidence.
+
+   When a card depends on an integration path, map the path explicitly before
+   marking it ready: producer, transformation, transport, persistence boundary,
+   runtime handoff, consumer, error/fail-closed behavior, and validation proof.
+   If multiple viable paths exist, research or inspect enough evidence to
+   compare them and document the selected path plus rejected alternatives.
 
 3. **Classify the item**
    Use one of these outcomes:
@@ -69,11 +79,19 @@ Do not start implementation during refinement unless the user explicitly asks.
    - **Success criteria**: observable behavior or artifact.
    - **Validation**: exact commands or proof artifact.
    - **Dependencies**: upstream cards/backlog records.
+   - **Decision record**: what was decided, why it fits the stated project
+     goals, what alternatives were rejected or deferred, and what assumptions
+     need later validation.
 
 6. **Preserve traceability**
-   - Keep the original broad item as an umbrella when it still names a useful theme.
+   - Keep the original intent as the human context for resulting work items.
+   - Link every resulting work item to one or more intents before `Ready`.
    - Add dependencies from child items to prerequisites.
+   - Persist research references with retrieval dates, topics, provenance, and links to the relevant intent/work item.
    - Use `backlog dependency add` for modeled dependencies; store explanatory context in `raw_json` only when the helper cannot represent the nuance.
+   - Record decision summaries in backlog notes or revised summaries so the
+     human can review and redirect the plan later without reconstructing the
+     reasoning from chat history.
    - Avoid deleting backlog records unless the user explicitly asks; prefer marking status/context in-place.
 
 7. **Mark only ready work as Ready**

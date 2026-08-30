@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sqlite3
@@ -113,6 +114,9 @@ DEFAULT_TRANSITIONS = (
     ("Deferred", "Ready", "resume condition satisfied and card is pullable"),
 )
 BACKLOG_STATUSES = ("new", "ready", "active", "done", "rejected", "deferred")
+INTENT_KINDS = ("idea", "problem", "concern", "opportunity", "question")
+INTENT_STATES = ("captured", "researching", "refining", "planned", "deferred", "closed")
+INTENT_CLOSURES = ("realized", "rejected")
 
 
 def fail(message: str, code: int = 2) -> None:
@@ -123,6 +127,23 @@ def fail(message: str, code: int = 2) -> None:
 def require_backlog_status(status: str, context: str = "backlog status") -> None:
     if status not in BACKLOG_STATUSES:
         fail(f"Invalid {context} {status}; expected one of {', '.join(BACKLOG_STATUSES)}")
+
+
+def require_intent_kind(kind: str) -> None:
+    if kind not in INTENT_KINDS:
+        fail(f"Invalid intent kind {kind}; expected one of {', '.join(INTENT_KINDS)}")
+
+
+def require_intent_state(state: str) -> None:
+    if state not in INTENT_STATES:
+        fail(f"Invalid intent state {state}; expected one of {', '.join(INTENT_STATES)}")
+
+
+def require_intent_closure(state: str, closure: str | None) -> None:
+    if state == "closed" and closure not in INTENT_CLOSURES:
+        fail(f"Closed intents require closure={','.join(INTENT_CLOSURES)}")
+    if state != "closed" and closure is not None:
+        fail("Only closed intents may have a closure reason")
 
 
 def now() -> int:
@@ -1411,9 +1432,158 @@ def validate_db(conn: sqlite3.Connection) -> None:
     ).fetchall()
     if duplicate_themes:
         errors.append("duplicate task themes")
+    for row in conn.execute("SELECT id, kind, state, closure FROM intents"):
+        try:
+            require_intent_kind(row["kind"])
+            require_intent_state(row["state"])
+            require_intent_closure(row["state"], row["closure"])
+        except SystemExit:
+            errors.append(f"{row['id']}: invalid intent lifecycle")
+    intent_links_enforced = conn.execute("SELECT value FROM meta WHERE key = 'intent_links_enforced'").fetchone()
+    if intent_links_enforced and intent_links_enforced["value"] == "1":
+        for row in conn.execute("SELECT t.id FROM tasks t WHERE t.column_name = 'Ready' AND NOT EXISTS (SELECT 1 FROM intent_work_links l WHERE l.task_id = t.id)"):
+            errors.append(f"{row['id']}: Ready task has no intent link")
     if errors:
         fail("; ".join(errors), 1)
     print(f"PASS kanban db valid tasks={task_count}")
+
+
+def intent_add(conn: sqlite3.Connection, intent_id: str, summary: str, kind: str) -> None:
+    require_intent_kind(kind)
+    timestamp = now()
+    raw = {"id": intent_id, "summary": summary, "kind": kind, "state": "captured"}
+    with write_transaction(conn):
+        conn.execute("INSERT INTO intents(id, summary, kind, state, raw_json, created_at, updated_at) VALUES(?, ?, ?, 'captured', ?, ?, ?)", (intent_id, summary, kind, json_dumps(raw), timestamp, timestamp))
+    print(f"created intent {intent_id}")
+
+
+def intent_list(conn: sqlite3.Connection, state: str | None, kind: str | None) -> None:
+    if state:
+        require_intent_state(state)
+    if kind:
+        require_intent_kind(kind)
+    clauses, params = [], []
+    if state:
+        clauses.append("state = ?")
+        params.append(state)
+    if kind:
+        clauses.append("kind = ?")
+        params.append(kind)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    for row in conn.execute(f"SELECT id, kind, state, summary FROM intents{where} ORDER BY id", params):
+        print(f"{row['state']}\t{row['id']}\t{row['kind']}\t{row['summary']}")
+
+
+def intent_show(conn: sqlite3.Connection, intent_id: str) -> None:
+    row = conn.execute("SELECT * FROM intents WHERE id = ?", (intent_id,)).fetchone()
+    if row is None:
+        fail(f"Unknown intent: {intent_id}")
+    print(json.dumps(dict(row), indent=2, sort_keys=True))
+
+
+def intent_status(conn: sqlite3.Connection, intent_id: str, state: str, closure: str | None, reason: str | None) -> None:
+    require_intent_state(state)
+    require_intent_closure(state, closure)
+    with write_transaction(conn):
+        row = conn.execute("SELECT raw_json FROM intents WHERE id = ?", (intent_id,)).fetchone()
+        if row is None:
+            fail(f"Unknown intent: {intent_id}")
+        raw = json_loads(row["raw_json"], {})
+        raw.update({"state": state, "closure": closure})
+        if reason:
+            raw["closure_reason"] = reason
+        conn.execute("UPDATE intents SET state = ?, closure = ?, raw_json = ?, updated_at = ? WHERE id = ?", (state, closure, json_dumps(raw), now(), intent_id))
+
+
+def intent_link(conn: sqlite3.Connection, intent_id: str, task_id: str, remove: bool = False) -> None:
+    if conn.execute("SELECT 1 FROM intents WHERE id = ?", (intent_id,)).fetchone() is None:
+        fail(f"Unknown intent: {intent_id}")
+    if conn.execute("SELECT 1 FROM tasks WHERE id = ?", (task_id,)).fetchone() is None:
+        fail(f"Unknown task: {task_id}")
+    with write_transaction(conn):
+        if remove:
+            conn.execute("DELETE FROM intent_work_links WHERE intent_id = ? AND task_id = ?", (intent_id, task_id))
+        else:
+            conn.execute("INSERT OR IGNORE INTO intent_work_links(intent_id, task_id) VALUES(?, ?)", (intent_id, task_id))
+
+
+def intent_work(conn: sqlite3.Connection, intent_id: str) -> None:
+    if conn.execute("SELECT 1 FROM intents WHERE id = ?", (intent_id,)).fetchone() is None:
+        fail(f"Unknown intent: {intent_id}")
+    for row in conn.execute("SELECT t.id, t.column_name, t.goal FROM tasks t JOIN intent_work_links l ON l.task_id = t.id WHERE l.intent_id = ? ORDER BY t.id", (intent_id,)):
+        print(f"{row['column_name']}\t{row['id']}\t{row['goal'] or ''}")
+
+
+def reference_add(conn: sqlite3.Connection, reference_id: str, url: str, topics: list[str], title: str | None, publisher: str | None) -> None:
+    url = url.split("#", 1)[0]
+    with write_transaction(conn):
+        existing = conn.execute("SELECT id FROM research_references WHERE url = ? ORDER BY id LIMIT 1", (url,)).fetchone()
+        if existing is not None:
+            print(f"existing reference {existing['id']}")
+            return
+        timestamp = now()
+        conn.execute("INSERT INTO research_references(id, url, title, publisher, retrieved_at, topics_json, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", (reference_id, url, title, publisher, str(timestamp), json_dumps(topics), timestamp, timestamp))
+    print(f"created reference {reference_id}")
+
+
+def reference_list(conn: sqlite3.Connection, review_state: str | None, topic: str | None) -> None:
+    clauses, params = [], []
+    if review_state:
+        clauses.append("review_state = ?")
+        params.append(review_state)
+    if topic:
+        clauses.append("topics_json LIKE ?")
+        params.append(f"%{topic}%")
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    for row in conn.execute(f"SELECT id, url, review_state, retrieved_at FROM research_references{where} ORDER BY id", params):
+        print(f"{row['review_state']}\t{row['id']}\t{row['retrieved_at']}\t{row['url']}")
+
+
+def reference_link(conn: sqlite3.Connection, reference_id: str, target_id: str, task: bool) -> None:
+    if conn.execute("SELECT 1 FROM research_references WHERE id = ?", (reference_id,)).fetchone() is None:
+        fail(f"Unknown reference: {reference_id}")
+    table = "reference_tasks" if task else "reference_intents"
+    target_table = "tasks" if task else "intents"
+    target_column = "task_id" if task else "intent_id"
+    if conn.execute(f"SELECT 1 FROM {target_table} WHERE id = ?", (target_id,)).fetchone() is None:
+        fail(f"Unknown {'task' if task else 'intent'}: {target_id}")
+    with write_transaction(conn):
+        conn.execute(f"INSERT OR IGNORE INTO {table}(reference_id, {target_column}) VALUES(?, ?)", (reference_id, target_id))
+
+
+def migrate_references(conn: sqlite3.Connection) -> None:
+    url_pattern = re.compile(r"https?://[^\s)>\]\"']+")
+    sources = [
+        ("backlog_ideas", "backlog_idea", "id", "raw_json", ""),
+        ("tasks", "task", "id", "raw_json", ""),
+        ("task_events", "task_event", "event_id", "message", "task_id"),
+        ("clarifications", "clarification", "id", "question", "task_id"),
+        ("principles", "principle", "id", "raw_json", ""),
+    ]
+    discovered = 0
+    created = 0
+    linked = 0
+    for table, label, id_column, text_column, task_column in sources:
+        for row in conn.execute(f"SELECT * FROM {table}"):
+            text_value = str(row[text_column] or "")
+            for raw_url in url_pattern.findall(text_value):
+                url = raw_url.rstrip(".,;:")
+                discovered += 1
+                reference_id = "legacy-ref-" + hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+                with write_transaction(conn):
+                    existing = conn.execute("SELECT id FROM research_references WHERE url = ?", (url.split("#", 1)[0],)).fetchone()
+                    if existing is None:
+                        timestamp = now()
+                        provenance = {"discovered_from": label, "source_id": str(row[id_column]), "discovery_method": "legacy-url-scan"}
+                        conn.execute("INSERT OR IGNORE INTO research_references(id, url, retrieved_at, provenance_json, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?)", (reference_id, url.split("#", 1)[0], str(timestamp), json_dumps(provenance), timestamp, timestamp))
+                        created += 1
+                        reference_id = reference_id
+                    else:
+                        reference_id = existing["id"]
+                    if task_column and row[task_column] is not None:
+                        conn.execute("INSERT OR IGNORE INTO reference_tasks(reference_id, task_id) VALUES(?, ?)", (reference_id, row[task_column]))
+                        linked += 1
+    print(f"references discovered={discovered} created={created} linked={linked}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1435,6 +1605,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.add_argument("--all", action="store_true")
 
     p_validate = sub.add_parser("validate")
+
+    p_migrate = sub.add_parser("migrate")
+    migrate_sub = p_migrate.add_subparsers(dest="migrate_cmd", required=True)
+    migrate_sub.add_parser("references")
 
     p_config = sub.add_parser("config")
     config_sub = p_config.add_subparsers(dest="config_cmd", required=True)
@@ -1586,6 +1760,47 @@ def build_parser() -> argparse.ArgumentParser:
     p_backlog_priority_bump.add_argument("idea_id")
     p_backlog_priority_bump.add_argument("--reason", required=True)
 
+    p_intent = sub.add_parser("intent")
+    intent_sub = p_intent.add_subparsers(dest="intent_cmd", required=True)
+    p_intent_add = intent_sub.add_parser("add")
+    p_intent_add.add_argument("intent_id")
+    p_intent_add.add_argument("summary")
+    p_intent_add.add_argument("--kind", choices=INTENT_KINDS, default="question")
+    p_intent_list = intent_sub.add_parser("list")
+    p_intent_list.add_argument("--state", choices=INTENT_STATES)
+    p_intent_list.add_argument("--kind", choices=INTENT_KINDS)
+    p_intent_show = intent_sub.add_parser("show")
+    p_intent_show.add_argument("intent_id")
+    p_intent_status = intent_sub.add_parser("status")
+    p_intent_status.add_argument("intent_id")
+    p_intent_status.add_argument("state", choices=INTENT_STATES)
+    p_intent_status.add_argument("--closure", choices=INTENT_CLOSURES)
+    p_intent_status.add_argument("--reason")
+    p_intent_work = intent_sub.add_parser("work")
+    p_intent_work.add_argument("intent_id")
+    p_intent_link = intent_sub.add_parser("link")
+    p_intent_link.add_argument("intent_id")
+    p_intent_link.add_argument("task_id")
+    p_intent_unlink = intent_sub.add_parser("unlink")
+    p_intent_unlink.add_argument("intent_id")
+    p_intent_unlink.add_argument("task_id")
+
+    p_reference = sub.add_parser("reference")
+    reference_sub = p_reference.add_subparsers(dest="reference_cmd", required=True)
+    p_reference_add = reference_sub.add_parser("add")
+    p_reference_add.add_argument("reference_id")
+    p_reference_add.add_argument("url")
+    p_reference_add.add_argument("--topic", action="append", default=[])
+    p_reference_add.add_argument("--title")
+    p_reference_add.add_argument("--publisher")
+    p_reference_list = reference_sub.add_parser("list")
+    p_reference_list.add_argument("--review-state", choices=("needs_review", "reviewed"))
+    p_reference_list.add_argument("--topic")
+    p_reference_link = reference_sub.add_parser("link")
+    p_reference_link.add_argument("reference_id")
+    p_reference_link.add_argument("target_id")
+    p_reference_link.add_argument("--task", action="store_true")
+
     p_clarify = sub.add_parser("clarify")
     clarify_sub = p_clarify.add_subparsers(dest="clarify_cmd", required=True)
     p_clarify_add = clarify_sub.add_parser("add")
@@ -1619,6 +1834,9 @@ def main(argv: list[str] | None = None) -> int:
         status(conn, args.all)
     elif args.cmd == "validate":
         validate_db(conn)
+    elif args.cmd == "migrate":
+        if args.migrate_cmd == "references":
+            migrate_references(conn)
     elif args.cmd == "config":
         if args.config_cmd == "list":
             list_config(conn)
@@ -1710,6 +1928,28 @@ def main(argv: list[str] | None = None) -> int:
                 backlog_set_priority(conn, args.idea_id, args.value, args.reason)
             elif args.backlog_priority_cmd == "bump":
                 backlog_bump_priority(conn, args.idea_id, args.reason)
+    elif args.cmd == "intent":
+        if args.intent_cmd == "add":
+            intent_add(conn, args.intent_id, args.summary, args.kind)
+        elif args.intent_cmd == "list":
+            intent_list(conn, args.state, args.kind)
+        elif args.intent_cmd == "show":
+            intent_show(conn, args.intent_id)
+        elif args.intent_cmd == "status":
+            intent_status(conn, args.intent_id, args.state, args.closure, args.reason)
+        elif args.intent_cmd == "work":
+            intent_work(conn, args.intent_id)
+        elif args.intent_cmd == "link":
+            intent_link(conn, args.intent_id, args.task_id)
+        elif args.intent_cmd == "unlink":
+            intent_link(conn, args.intent_id, args.task_id, remove=True)
+    elif args.cmd == "reference":
+        if args.reference_cmd == "add":
+            reference_add(conn, args.reference_id, args.url, args.topic, args.title, args.publisher)
+        elif args.reference_cmd == "list":
+            reference_list(conn, args.review_state, args.topic)
+        elif args.reference_cmd == "link":
+            reference_link(conn, args.reference_id, args.target_id, args.task)
     elif args.cmd == "clarify":
         if args.clarify_cmd == "add":
             add_clarification(conn, args.task, args.question, args.default)

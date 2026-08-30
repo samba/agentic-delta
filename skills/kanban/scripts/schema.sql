@@ -95,6 +95,69 @@ CREATE TABLE IF NOT EXISTS task_events (
 
 CREATE INDEX IF NOT EXISTS task_events_task_idx ON task_events(task_id);
 
+CREATE TABLE IF NOT EXISTS intents (
+    id TEXT PRIMARY KEY,
+    summary TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'question',
+    state TEXT NOT NULL DEFAULT 'captured',
+    closure TEXT,
+    raw_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    CHECK (kind IN ('idea', 'problem', 'concern', 'opportunity', 'question')),
+    CHECK (state IN ('captured', 'researching', 'refining', 'planned', 'deferred', 'closed')),
+    CHECK ((state = 'closed' AND closure IN ('realized', 'rejected')) OR
+           (state <> 'closed' AND closure IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS intents_state_idx ON intents(state);
+
+CREATE TABLE IF NOT EXISTS intent_work_links (
+    intent_id TEXT NOT NULL REFERENCES intents(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    PRIMARY KEY (intent_id, task_id)
+);
+
+CREATE INDEX IF NOT EXISTS intent_work_links_task_idx ON intent_work_links(task_id);
+
+CREATE TABLE IF NOT EXISTS research_references (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    title TEXT,
+    publisher TEXT,
+    reference_type TEXT,
+    published_at TEXT,
+    retrieved_at TEXT NOT NULL,
+    topics_json TEXT NOT NULL DEFAULT '[]',
+    summary TEXT,
+    relevance TEXT,
+    constraints TEXT,
+    provenance_json TEXT NOT NULL DEFAULT '{}',
+    content_hash TEXT,
+    review_state TEXT NOT NULL DEFAULT 'needs_review',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    CHECK (review_state IN ('needs_review', 'reviewed'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS research_references_url_hash_idx
+    ON research_references(url, COALESCE(content_hash, ''));
+
+CREATE TABLE IF NOT EXISTS reference_intents (
+    reference_id TEXT NOT NULL REFERENCES research_references(id) ON DELETE CASCADE,
+    intent_id TEXT NOT NULL REFERENCES intents(id) ON DELETE CASCADE,
+    PRIMARY KEY (reference_id, intent_id)
+);
+
+CREATE TABLE IF NOT EXISTS reference_tasks (
+    reference_id TEXT NOT NULL REFERENCES research_references(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    PRIMARY KEY (reference_id, task_id)
+);
+
+CREATE INDEX IF NOT EXISTS reference_intents_intent_idx ON reference_intents(intent_id);
+CREATE INDEX IF NOT EXISTS reference_tasks_task_idx ON reference_tasks(task_id);
+
 CREATE TABLE IF NOT EXISTS backlog_ideas (
     id TEXT PRIMARY KEY,
     summary TEXT,
