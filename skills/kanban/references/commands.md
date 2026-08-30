@@ -42,6 +42,14 @@ and ask the user to restate the command. Do not infer intent.
 - `work status`: report current board state, active/background lanes, blockers,
   validation debt, review items, and next pullable work. Do not start new work.
 
+### Task creation
+
+Use `task add` to create an executable work item. It requires at least one
+existing intent link and stores scope, dependencies, exit criteria, validation,
+themes, and optional plan context in the task record. New tasks start in
+`Backlog`; use `--column Ready` only when the required readiness fields are
+complete. Do not use `backlog add` for executable work items.
+
 All board inspection and mutation must use the bundled kanban helper. Direct SQL
 and alternate SQLite clients are prohibited, including for read-only inspection.
 When a required query or mutation is unavailable, raise a tooling-improvement

@@ -64,6 +64,7 @@ python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" column list
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" column transition list
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task list --column Ready
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task show <task-id>
+python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task add <task-id> "<goal>" --intent <intent-id> --scope "<scope>" --exit-criterion "<criterion>" --validation "<probe>"
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task move <task-id> Active --owner <owner>
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task blocker add <task-id> <blocked-by> --reason "<why>"
 python3 "$CODEX_HOME/skills/kanban/scripts/kanban.py" task review accept <task-id> --evidence "<proof>"
