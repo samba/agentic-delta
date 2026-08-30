@@ -1,0 +1,752 @@
+{
+  "schema_version": 1,
+  "updated": "2026-08-23",
+  "purpose": "Federated catalog of local tracking repositories and published skill sources for agentic software-development workflows.",
+  "default_cache_dir": ".cache/skill-federation",
+  "default_log": "~/.codex/skills/.skill-federation/logs/skill-federation.ndjson",
+  "default_install_targets": [
+    {
+      "agent": "codex",
+      "skills_dir": "~/.codex/skills"
+    },
+    {
+      "agent": "claude",
+      "skills_dir": "~/.claude/skills"
+    },
+    {
+      "agent": "cursor",
+      "skills_dir": "~/.cursor/skills"
+    }
+  ],
+  "policy_defaults": {
+    "local_repo": {
+      "trust_status": "trusted",
+      "install_policy": "installable",
+      "review_status": "reviewed"
+    },
+    "git_repo": {
+      "trust_status": "candidate",
+      "install_policy": "review-required",
+      "review_status": "unreviewed"
+    },
+    "article": {
+      "trust_status": "reference",
+      "install_policy": "reference-only",
+      "review_status": "partially-reviewed"
+    },
+    "tutorial": {
+      "trust_status": "reference",
+      "install_policy": "reference-only",
+      "review_status": "partially-reviewed"
+    },
+    "directory": {
+      "trust_status": "watchlist",
+      "install_policy": "discovery-only",
+      "review_status": "unreviewed"
+    }
+  },
+  "sources": [
+    {
+      "id": "agentic-delta",
+      "kind": "local_repo",
+      "name": "Agentic Delta",
+      "repo_url": "https://github.com/samba/agentic-delta.git",
+      "repo_url_provenance": "git-remote",
+      "local_path": "/home/samba/Projects/agentic-delta",
+      "skills_path": "skills",
+      "keywords": ["coordination", "workflow", "reflection", "telemetry", "kanban"],
+      "skills": [
+        {
+          "name": "adaptive-reflection",
+          "path": "skills/adaptive-reflection",
+          "status": "installed",
+          "capabilities": ["method reflection", "failure pattern analysis", "skill improvement backlog"],
+          "keywords": ["reflection", "retrospective", "methods", "patterns"]
+        },
+        {
+          "name": "kanban",
+          "path": "skills/kanban",
+          "status": "installed",
+          "capabilities": ["autonomous loop coordination", "design validation gate", "rework routing", "validation contracts"],
+          "keywords": ["kanban", "autonomous loop", "design validation", "background coordinator", "rework"]
+        },
+        {
+          "name": "learning-ledger",
+          "path": "skills/learning-ledger",
+          "status": "installed",
+          "capabilities": ["execution telemetry", "stage decision logs", "learning aggregates"],
+          "keywords": ["ledger", "telemetry", "events", "stage records"]
+        }
+      ]
+    },
+    {
+      "id": "agentic-data",
+      "kind": "local_repo",
+      "name": "Agentic Data",
+      "repo_url": "https://github.com/samba/agentic-data.git",
+      "repo_url_provenance": "git-remote",
+      "local_path": "/home/samba/Projects/agentic-data",
+      "skills_path": "skills",
+      "keywords": ["data", "research", "database", "statistics", "geospatial"],
+      "skills": [
+        {
+          "name": "database-architecture",
+          "path": "skills/database-architecture",
+          "status": "installed",
+          "capabilities": ["schema validation", "query-plan validation", "migration design", "transactional governance"],
+          "keywords": ["database", "schema", "sql", "migration", "query plan"]
+        },
+        {
+          "name": "data-source-plugin-creator",
+          "path": "skills/data-source-plugin-creator",
+          "status": "installed",
+          "capabilities": ["source adapter validation", "credential safety", "license/provenance capture"],
+          "keywords": ["data source", "plugin", "provenance", "license", "credentials"]
+        },
+        {
+          "name": "evidence-led-research",
+          "path": "skills/evidence-led-research",
+          "status": "installed",
+          "capabilities": ["auditable research", "claim classification", "source manifest validation"],
+          "keywords": ["research", "evidence", "citations", "manifest", "claims"]
+        },
+        {
+          "name": "geospatial-data-modeling",
+          "path": "skills/geospatial-data-modeling",
+          "status": "installed",
+          "capabilities": ["spatial joins", "boundary versioning", "geospatial exposure validation"],
+          "keywords": ["geospatial", "postgis", "spatial", "boundaries"]
+        },
+        {
+          "name": "population-data-research",
+          "path": "skills/population-data-research",
+          "status": "installed",
+          "capabilities": ["population dataset validation", "public demographic source research"],
+          "keywords": ["population", "demography", "public data", "world bank", "un"]
+        },
+        {
+          "name": "statistical-analysis",
+          "path": "skills/statistical-analysis",
+          "status": "installed",
+          "capabilities": ["trend detection", "regression review", "confidence intervals", "causal-claim guardrails"],
+          "keywords": ["statistics", "regression", "survey", "confidence", "causal"]
+        }
+      ]
+    },
+    {
+      "id": "agentic-sre",
+      "kind": "local_repo",
+      "name": "Agentic SRE",
+      "repo_url": "https://github.com/samba/agentic-sre.git",
+      "repo_url_provenance": "git-remote",
+      "local_path": "/home/samba/Projects/agentic-sre",
+      "skills_path": "skills",
+      "keywords": ["sre", "systems", "security", "kubernetes", "code style", "commits"],
+      "skills": [
+        {
+          "name": "kubectl",
+          "path": "skills/kubectl",
+          "status": "installed",
+          "capabilities": ["kubernetes context discovery", "cluster inspection", "explicit kubeconfig validation"],
+          "keywords": ["kubernetes", "kubectl", "cluster", "kubeconfig"]
+        },
+        {
+          "name": "langgen",
+          "path": "skills/langgen",
+          "status": "installed",
+          "capabilities": ["structured config parsing", "grammar derivation", "AST validation"],
+          "keywords": ["grammar", "parser", "config", "ast"]
+        },
+        {
+          "name": "learn-code-style",
+          "path": "skills/learn-code-style",
+          "status": "installed",
+          "capabilities": ["local code-style learning", "style validation", "preference capture"],
+          "keywords": ["code style", "style", "conventions", "format"]
+        },
+        {
+          "name": "security-compliance-review",
+          "path": "skills/security-compliance-review",
+          "status": "installed",
+          "capabilities": ["security review", "compliance posture", "audit evidence", "trust boundary validation"],
+          "keywords": ["security", "compliance", "soc2", "iso27001", "privacy"]
+        },
+        {
+          "name": "smart-commits",
+          "path": "skills/smart-commits",
+          "status": "installed",
+          "capabilities": ["commit message validation", "evidence-backed commit summaries"],
+          "keywords": ["commit", "git", "message", "wip"]
+        },
+        {
+          "name": "systems-engineer-assist",
+          "path": "skills/systems-engineer-assist",
+          "status": "installed",
+          "capabilities": ["systems artifact validation", "distro/runtime compatibility", "CI/release blocker review"],
+          "keywords": ["systems", "scripts", "linux", "ci", "release"]
+        },
+        {
+          "name": "systems-engineer-diagnose",
+          "path": "skills/systems-engineer-diagnose",
+          "status": "installed",
+          "capabilities": ["known-good baseline recovery", "ambiguous validation diagnosis"],
+          "keywords": ["diagnose", "recovery", "baseline", "runtime"]
+        }
+      ]
+    },
+    {
+      "id": "agentic-docs",
+      "kind": "local_repo",
+      "name": "Agentic Docs",
+      "repo_url": "https://github.com/samba/agentic-docs.git",
+      "repo_url_provenance": "inferred-from-project-name",
+      "local_path": "/home/samba/Projects/agentic-docs",
+      "skills_path": "skills",
+      "keywords": ["documents", "markdown", "rendering", "pdf", "epub", "html"],
+      "skills": [
+        {
+          "name": "document-render-regression-guard",
+          "path": "skills/document-render-regression-guard",
+          "status": "installed",
+          "capabilities": ["document render regression validation", "PDF/EPUB/HTML layout checks"],
+          "keywords": ["pdf", "epub", "html", "render", "regression"]
+        },
+        {
+          "name": "safe-markdown-transform",
+          "path": "skills/safe-markdown-transform",
+          "status": "installed",
+          "capabilities": ["safe markdown rewrite validation", "deterministic rollback points"],
+          "keywords": ["markdown", "rewrite", "transform", "rollback"]
+        }
+      ]
+    },
+    {
+      "id": "agentic-engineering",
+      "kind": "local_repo",
+      "name": "Agentic Engineering",
+      "repo_url": "https://github.com/samba/agentic-engineering.git",
+      "repo_url_provenance": "inferred-from-project-name",
+      "local_path": "/home/samba/Projects/agentic-engineering",
+      "skills_path": "skills",
+      "keywords": ["engineering", "physical systems", "cad", "bom", "prototype"],
+      "skills": [
+        {
+          "name": "physical-systems-engineering",
+          "path": "skills/physical-systems-engineering",
+          "status": "installed",
+          "capabilities": ["physical system design validation", "CAD/BOM validation", "solver-guided prototype checks"],
+          "keywords": ["physical", "cad", "bom", "mechanical", "prototype"]
+        }
+      ]
+    },
+    {
+      "id": "minimumcd-agentic-cd",
+      "kind": "article",
+      "name": "MinimumCD Agentic CD Repository Readiness",
+      "url": "https://beyond.minimumcd.org/docs/agentic-cd/getting-started/repo-readiness/",
+      "keywords": ["repo readiness", "agentic cd", "build", "test", "ci", "feedback"],
+      "skills": [
+        {
+          "name": "repository-readiness",
+          "status": "candidate",
+          "capabilities": ["agent-readiness scoring", "build/test ergonomics", "CI clarity", "dependency hygiene", "modularity review"],
+          "keywords": ["repo readiness", "build reproducibility", "test quality", "ci", "modularity"]
+        }
+      ]
+    },
+    {
+      "id": "mattpocock-skills",
+      "kind": "git_repo",
+      "name": "Matt Pocock Skills",
+      "repo_url": "https://github.com/mattpocock/skills.git",
+      "skills_path": "skills",
+      "keywords": ["qa", "testing", "typescript", "quality"],
+      "skills": [
+        {
+          "name": "qa",
+          "path": "skills/qa",
+          "status": "candidate",
+          "capabilities": ["QA discipline", "test strategy", "test granularity", "failure-signal quality"],
+          "keywords": ["qa", "testing", "test strategy", "quality assurance"]
+        }
+      ]
+    },
+    {
+      "id": "trailofbits-skills",
+      "kind": "git_repo",
+      "name": "Trail of Bits Skills Marketplace",
+      "repo_url": "https://github.com/trailofbits/skills.git",
+      "skills_path": "skills",
+      "keywords": ["security", "testing", "audit", "vulnerability", "analysis"],
+      "skills": [
+        {
+          "name": "operational-security-scanning",
+          "status": "candidate",
+          "capabilities": ["SAST orchestration", "dependency audit", "secrets scanning", "security testing workflow"],
+          "keywords": ["security scanning", "sast", "dependency audit", "secrets", "vulnerability"]
+        }
+      ]
+    },
+    {
+      "id": "jeffallan-claude-skills",
+      "kind": "git_repo",
+      "name": "Jeff Allan Claude Skills",
+      "repo_url": "https://github.com/jeffallan/claude-skills.git",
+      "skills_path": "skills",
+      "keywords": ["security", "review", "infrastructure", "cloud"],
+      "skills": [
+        {
+          "name": "security-reviewer",
+          "path": "skills/security-reviewer",
+          "status": "candidate",
+          "capabilities": ["structured vulnerability review", "dependency audit", "secrets scan", "severity triage"],
+          "keywords": ["security reviewer", "vulnerability", "audit", "cloud", "infrastructure"]
+        }
+      ]
+    },
+    {
+      "id": "zcaceres-skills",
+      "kind": "git_repo",
+      "name": "Zach Caceres Skills",
+      "repo_url": "https://github.com/zcaceres/skills.git",
+      "skills_path": "skills",
+      "keywords": ["quality", "security", "performance", "supply chain", "automation"],
+      "skills": [
+        {
+          "name": "performance-review",
+          "status": "candidate",
+          "capabilities": ["performance review", "scaling validation", "benchmark planning", "latency/memory risk review"],
+          "keywords": ["performance", "scaling", "benchmark", "latency", "memory"]
+        },
+        {
+          "name": "dependency-supply-chain-license-review",
+          "status": "candidate",
+          "capabilities": ["dependency vetting", "license compatibility", "provenance review", "lockfile hygiene"],
+          "keywords": ["dependencies", "supply chain", "license", "provenance", "lockfile"]
+        }
+      ]
+    },
+    {
+      "id": "starkslab-agent-workflow",
+      "kind": "article",
+      "name": "Starkslab AI Coding Agent Workflow",
+      "url": "https://starkslab.com/notes/ai-coding-agent-workflow",
+      "keywords": ["isolation", "worktree", "guardrails", "review", "merge authority"],
+      "skills": [
+        {
+          "name": "isolated-agent-execution",
+          "status": "candidate",
+          "capabilities": ["worktree workflow", "sandbox execution", "bounded task contract", "rollback strategy"],
+          "keywords": ["worktree", "isolation", "sandbox", "rollback", "merge authority"]
+        }
+      ]
+    },
+    {
+      "id": "coderabbit-agent-workflow",
+      "kind": "article",
+      "name": "CodeRabbit Coding Agent Workflow",
+      "url": "https://www.coderabbit.ai/guides/coding-agent-workflow",
+      "keywords": ["pr review", "ci", "agent volume", "verification", "merge"],
+      "skills": [
+        {
+          "name": "pr-ci-review-orchestration",
+          "status": "candidate",
+          "capabilities": ["PR check review", "CI failure routing", "review-capacity management", "agent-output governance"],
+          "keywords": ["pull request", "ci", "review", "agent volume", "governance"]
+        }
+      ]
+    },
+    {
+      "id": "chenli-agent-skills-tutorial",
+      "kind": "tutorial",
+      "name": "Production-Grade Agent Skill Tutorial",
+      "url": "https://www.chenli.dev/posts/production_grade_agent_skill_tutorial",
+      "keywords": ["verify", "review", "devtools", "debugging", "performance", "hardening"],
+      "skills": [
+        {
+          "name": "code-review-maintainability",
+          "status": "candidate",
+          "capabilities": ["quality review", "code simplification", "maintainability review", "root-cause focus"],
+          "keywords": ["code review", "maintainability", "simplification", "quality"]
+        },
+        {
+          "name": "browser-devtools-testing",
+          "status": "candidate",
+          "capabilities": ["browser validation", "DevTools debugging", "frontend behavior proof"],
+          "keywords": ["browser", "devtools", "frontend", "screenshots", "ui testing"]
+        }
+      ]
+    },
+    {
+      "id": "microsoft-azure-agent-workflow",
+      "kind": "article",
+      "name": "Microsoft Agent-Based Azure Development Workflow",
+      "url": "https://learn.microsoft.com/en-us/startups/build/azure-getting-started/startup-dev-workflow",
+      "keywords": ["azure", "cloud", "landing zone", "governance", "qa"],
+      "skills": [
+        {
+          "name": "cloud-specific-agent-skills",
+          "status": "candidate",
+          "capabilities": ["cloud landing-zone review", "identity/security review", "governance/cost review", "IaC validation"],
+          "keywords": ["azure", "cloud", "identity", "governance", "iac"]
+        }
+      ]
+    },
+    {
+      "id": "mastering-claude-skill-library",
+      "kind": "directory",
+      "name": "Claude Code Skills Library",
+      "url": "https://mastering-claude.com/skills/",
+      "keywords": ["skill library", "marketplace vetting", "third-party skills", "audit"],
+      "skills": [
+        {
+          "name": "skill-marketplace-vetting",
+          "status": "candidate",
+          "capabilities": ["third-party skill audit", "marketplace triage", "security screening before install"],
+          "keywords": ["skill vetting", "marketplace", "audit", "third party", "security"]
+        }
+      ]
+    },
+    {
+      "id": "johnqtcg-awesome-skills",
+      "kind": "git_repo",
+      "name": "Awesome Skills",
+      "repo_url": "https://github.com/johnqtcg/awesome-skills.git",
+      "skills_path": "skills",
+      "keywords": ["production-ready skills", "evaluation", "golden fixtures", "go", "testing", "ci", "security"],
+      "skills": [
+        {
+          "name": "tdd-workflow",
+          "status": "candidate",
+          "capabilities": ["TDD workflow", "behavior-focused tests", "red-green-refactor"],
+          "keywords": ["tdd", "testing", "workflow"]
+        },
+        {
+          "name": "unit-test",
+          "status": "candidate",
+          "capabilities": ["unit test design", "small feedback loops", "fixture validation"],
+          "keywords": ["unit test", "testing", "fixtures"]
+        },
+        {
+          "name": "api-integration-test",
+          "status": "candidate",
+          "capabilities": ["API integration testing", "contract validation", "service boundary tests"],
+          "keywords": ["api", "integration test", "contract"]
+        },
+        {
+          "name": "e2e-test",
+          "status": "candidate",
+          "capabilities": ["end-to-end test design", "workflow proof", "acceptance validation"],
+          "keywords": ["e2e", "acceptance", "workflow"]
+        },
+        {
+          "name": "fuzzing-test",
+          "status": "candidate",
+          "capabilities": ["fuzz testing", "edge-case discovery", "robustness validation"],
+          "keywords": ["fuzzing", "robustness", "edge cases"]
+        },
+        {
+          "name": "go-code-reviewer",
+          "status": "candidate",
+          "capabilities": ["Go code review", "defect-first review", "regression risk review"],
+          "keywords": ["go", "code review", "defects"]
+        },
+        {
+          "name": "security-review",
+          "status": "candidate",
+          "capabilities": ["exploitability-first security review", "auth/input/dependency/container risk review"],
+          "keywords": ["security", "exploitability", "auth", "dependencies"]
+        },
+        {
+          "name": "go-ci-workflow",
+          "status": "candidate",
+          "capabilities": ["Go CI workflow design", "Make-driven CI", "quality gate alignment"],
+          "keywords": ["go", "ci", "github actions", "makefile"]
+        },
+        {
+          "name": "create-pr",
+          "status": "candidate",
+          "capabilities": ["PR creation", "preflight checks", "structured pull request content"],
+          "keywords": ["pull request", "pr", "preflight"]
+        }
+      ]
+    },
+    {
+      "id": "ruicore-codex-skills",
+      "kind": "git_repo",
+      "name": "Codex Skills",
+      "repo_url": "https://github.com/ruicore/codex-skills.git",
+      "skills_path": "skills",
+      "keywords": ["codex", "diagnosis", "architecture", "tdd", "repository execution", "agent memory"],
+      "skills": [
+        {
+          "name": "diagnose",
+          "status": "candidate",
+          "capabilities": ["bug diagnosis", "reproduce-minimize-instrument-fix loop", "regression testing"],
+          "keywords": ["diagnose", "debugging", "regression"]
+        },
+        {
+          "name": "architecture-review",
+          "status": "candidate",
+          "capabilities": ["repository-local architecture review", "ownership and boundary validation"],
+          "keywords": ["architecture", "review", "boundaries"]
+        },
+        {
+          "name": "agentic-repository-execution",
+          "status": "candidate",
+          "capabilities": ["master/sub-agent repository execution", "ownership handoffs", "validation gates"],
+          "keywords": ["agentic execution", "handoffs", "validation"]
+        },
+        {
+          "name": "tdd",
+          "status": "candidate",
+          "capabilities": ["practical behavior-focused TDD", "test-first implementation"],
+          "keywords": ["tdd", "tests", "behavior"]
+        },
+        {
+          "name": "prd-to-issues",
+          "status": "candidate",
+          "capabilities": ["brief-to-issue decomposition", "planning artifacts", "execution slices"],
+          "keywords": ["prd", "issues", "planning"]
+        },
+        {
+          "name": "agent-legibility-review",
+          "status": "candidate",
+          "capabilities": ["future-agent navigability review", "repository legibility", "safe modification review"],
+          "keywords": ["agent legibility", "repository", "review"]
+        },
+        {
+          "name": "database-access-audit",
+          "status": "candidate",
+          "capabilities": ["database access pattern audit", "stack-agnostic data access review"],
+          "keywords": ["database", "audit", "access patterns"]
+        }
+      ]
+    },
+    {
+      "id": "petrkindlmann-qa-skills",
+      "kind": "git_repo",
+      "name": "QA Skills",
+      "repo_url": "https://github.com/petrkindlmann/qa-skills.git",
+      "skills_path": "skills",
+      "keywords": ["qa", "test automation", "playwright", "visual regression", "bug triage"],
+      "skills": [
+        {
+          "name": "test-strategy",
+          "status": "candidate",
+          "capabilities": ["risk-based test planning", "test scope selection", "coverage matrix design"],
+          "keywords": ["test strategy", "risk based", "coverage"]
+        },
+        {
+          "name": "ai-qa-review",
+          "status": "candidate",
+          "capabilities": ["test quality review", "coverage gap detection", "testability analysis"],
+          "keywords": ["qa review", "test quality", "coverage"]
+        },
+        {
+          "name": "test-reliability",
+          "status": "candidate",
+          "capabilities": ["flaky-test handling", "selector stability", "test root-cause classification"],
+          "keywords": ["flaky", "reliability", "selectors"]
+        },
+        {
+          "name": "playwright-automation",
+          "status": "candidate",
+          "capabilities": ["browser automation", "Playwright test authoring", "UI workflow validation"],
+          "keywords": ["playwright", "browser", "ui testing"]
+        },
+        {
+          "name": "visual-regression",
+          "status": "candidate",
+          "capabilities": ["visual regression testing", "screenshot comparison", "UI change validation"],
+          "keywords": ["visual regression", "screenshots", "ui"]
+        },
+        {
+          "name": "performance-testing",
+          "status": "candidate",
+          "capabilities": ["performance test planning", "load and timing validation", "benchmark evidence"],
+          "keywords": ["performance testing", "load", "benchmark"]
+        },
+        {
+          "name": "ai-bug-triage",
+          "status": "candidate",
+          "capabilities": ["bug severity triage", "component classification", "CI failure analysis"],
+          "keywords": ["bug triage", "ci failures", "severity"]
+        }
+      ]
+    },
+    {
+      "id": "shinpr-codex-workflows",
+      "kind": "git_repo",
+      "name": "Codex Workflows",
+      "repo_url": "https://github.com/shinpr/codex-workflows.git",
+      "skills_path": "skills",
+      "keywords": ["codex", "workflow", "planning", "tdd", "quality gates", "design docs"],
+      "skills": [
+        {
+          "name": "coding-rules",
+          "status": "candidate",
+          "capabilities": ["code quality rules", "function design", "error handling", "refactoring criteria"],
+          "keywords": ["coding rules", "quality", "refactoring"]
+        },
+        {
+          "name": "testing",
+          "status": "candidate",
+          "capabilities": ["TDD", "test types", "AAA pattern", "mocking guidance"],
+          "keywords": ["testing", "tdd", "aaa", "mocks"]
+        },
+        {
+          "name": "ai-development-guide",
+          "status": "candidate",
+          "capabilities": ["AI development anti-patterns", "debugging", "quality check workflow"],
+          "keywords": ["ai development", "debugging", "quality"]
+        },
+        {
+          "name": "documentation-criteria",
+          "status": "candidate",
+          "capabilities": ["PRD/ADR/design doc criteria", "work plan templates", "durable docs"],
+          "keywords": ["documentation", "prd", "adr", "design doc"]
+        },
+        {
+          "name": "implementation-approach",
+          "status": "candidate",
+          "capabilities": ["vertical/horizontal/hybrid slicing", "implementation strategy selection"],
+          "keywords": ["slicing", "implementation", "strategy"]
+        }
+      ]
+    },
+    {
+      "id": "jscraik-agent-skills",
+      "kind": "git_repo",
+      "name": "Agent Skills Kit",
+      "repo_url": "https://github.com/jscraik/Agent-Skills.git",
+      "skills_path": "skills",
+      "keywords": ["governance", "command handles", "runtime projection", "skill quality"],
+      "skills": [
+        {
+          "name": "skill-governance",
+          "status": "candidate",
+          "capabilities": ["skill lifecycle governance", "quality validation", "canonical skill source control"],
+          "keywords": ["skill governance", "quality", "lifecycle"]
+        },
+        {
+          "name": "runtime-projection",
+          "status": "candidate",
+          "capabilities": ["runtime skill projection", "agent command surface control", "sync validation"],
+          "keywords": ["runtime", "projection", "sync", "commands"]
+        },
+        {
+          "name": "command-handle-routing",
+          "status": "candidate",
+          "capabilities": ["command handle routing", "small command surface", "skill invocation governance"],
+          "keywords": ["command handles", "routing", "invocation"]
+        }
+      ]
+    },
+    {
+      "id": "qt-agent-skills",
+      "kind": "git_repo",
+      "name": "Qt Agent Skills",
+      "repo_url": "https://github.com/TheQtCompanyRnD/agent-skills.git",
+      "skills_path": "skills",
+      "keywords": ["qt", "qml", "skill format", "mcp", "multi-agent review"],
+      "skills": [
+        {
+          "name": "skill-format-conventions",
+          "status": "candidate",
+          "capabilities": ["multi-agent skill format conventions", "compatibility metadata", "progressive disclosure examples"],
+          "keywords": ["skill format", "compatibility", "progressive disclosure"]
+        },
+        {
+          "name": "qt-qml-review",
+          "status": "candidate",
+          "capabilities": ["QML correctness review", "QML performance review", "maintainability linting"],
+          "keywords": ["qt", "qml", "review", "performance"]
+        }
+      ]
+    },
+    {
+      "id": "github-agentic-workflows",
+      "kind": "article",
+      "name": "GitHub Agentic Workflows for Codex",
+      "url": "https://github.github.com/gh-aw/engines/codex/",
+      "keywords": ["github actions", "codex", "agentic workflows", "sandbox", "triggers"],
+      "skills": [
+        {
+          "name": "github-agentic-workflow-orchestration",
+          "status": "candidate",
+          "capabilities": ["GitHub Actions agent orchestration", "reviewable automation", "safe outputs"],
+          "keywords": ["github actions", "codex", "orchestration", "ci"]
+        }
+      ]
+    },
+    {
+      "id": "claude-code-review-docs",
+      "kind": "article",
+      "name": "Claude Code Review Documentation",
+      "url": "https://code.claude.com/docs/en/code-review",
+      "keywords": ["code review", "pull request", "severity", "review instructions", "multi-agent"],
+      "skills": [
+        {
+          "name": "pr-review-policy",
+          "status": "candidate",
+          "capabilities": ["PR review policy", "severity calibration", "review instruction design"],
+          "keywords": ["pr review", "severity", "review policy"]
+        },
+        {
+          "name": "review-md-calibration",
+          "status": "candidate",
+          "capabilities": ["review-only instruction calibration", "nit volume control", "skip rules"],
+          "keywords": ["review.md", "calibration", "skip rules"]
+        }
+      ]
+    },
+    {
+      "id": "claude-security-review-docs",
+      "kind": "article",
+      "name": "Claude Security Review Documentation",
+      "url": "https://support.claude.com/en/articles/11932705-automated-security-reviews-in-claude-code",
+      "keywords": ["security review", "github actions", "dependency vulnerabilities", "sql injection", "xss"],
+      "skills": [
+        {
+          "name": "security-review-orchestration",
+          "status": "candidate",
+          "capabilities": ["security review command workflow", "GitHub Actions security review", "common vulnerability coverage"],
+          "keywords": ["security review", "github actions", "vulnerabilities"]
+        }
+      ]
+    },
+    {
+      "id": "sujay-awesome-claude-code-skills",
+      "kind": "directory",
+      "name": "Awesome Claude Code Skills",
+      "url": "https://github.com/sujayjayjay/awesome-claude-code-skills",
+      "keywords": ["awesome list", "claude code", "skills", "plugins", "orchestrators"],
+      "skills": []
+    },
+    {
+      "id": "viktorbezdek-awesome-ai-productivity",
+      "kind": "directory",
+      "name": "Awesome AI Productivity",
+      "url": "https://github.com/viktorbezdek/awesome-ai-productivity",
+      "keywords": ["awesome list", "claude code", "mcp", "plugins", "agent skills"],
+      "skills": []
+    },
+    {
+      "id": "nealemanley-claude-awesome-skills",
+      "kind": "directory",
+      "name": "Claude Awesome Skills",
+      "url": "https://github.com/nealemanley/claude-awesome-skills",
+      "keywords": ["awesome list", "skill catalog", "codex", "cursor", "gemini", "claude"],
+      "skills": []
+    },
+    {
+      "id": "getbindu-awesome-claude-code-and-skills",
+      "kind": "directory",
+      "name": "Awesome Claude Code and Skills",
+      "url": "https://github.com/GetBindu/awesome-claude-code-and-skills",
+      "keywords": ["awesome list", "security", "compliance", "skills", "claude code"],
+      "skills": []
+    }
+  ]
+}
