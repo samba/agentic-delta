@@ -18,12 +18,12 @@ Use this skill when the user asks to:
 
 This skill is part of an integrated method stack with:
 
-- `delegator`: produces execution-lane and validation events worth recording.
+- `kanban`: produces execution-lane, stage, and validation events worth recording.
 - `adaptive-reflection`: consumes ledger artifacts to refine methods and skills.
 
 Expected flow:
 
-1. `delegator` executes and emits meaningful state transitions.
+1. `kanban` coordinates work and emits meaningful state transitions.
 2. `learning-ledger` records those events and checkpoints in structured form.
 3. `adaptive-reflection` uses the retained and aggregated evidence to improve methods.
 
@@ -58,6 +58,11 @@ Expected flow:
    - `execution`: concrete task flow, checkpoints, tests, commits.
    - `reflection`: distilled lessons, hypotheses, and method deltas.
 3. Append structured events during execution and review loops, including a concise reason summary for meaningful redirects, fixes, and learned deltas.
+   For autonomous software-development loops, record stage transitions,
+   applicability decisions (`applied`, `skipped-not-applicable`, `blocked`,
+   `rework`), pre-handoff validation results, rework routes, retry counts,
+   design-validation outcomes, validation debt, and pattern checkpoints as
+   execution events.
 4. When a reflection artifact derives from execution history, record an explicit linkage back to the source delta or checkpoint.
 5. Run a leakage audit before promoting cross-track conclusions:
    - verify the reflection summary does not pull in unnecessary raw context,

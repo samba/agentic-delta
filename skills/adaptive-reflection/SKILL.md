@@ -15,12 +15,12 @@ Also use this skill when the user asks to "improve your methods".
 
 This skill is part of an integrated method stack with:
 
-- `delegator`: coordinates execution lanes and validation gates.
+- `kanban`: coordinates execution lanes, stage gates, and validation gates.
 - `learning-ledger`: provides structured event/checkpoint history for reflection input.
 
 Expected flow:
 
-1. execution is coordinated by `delegator`,
+1. execution is coordinated by `kanban`,
 2. events and checkpoints are captured by `learning-ledger`,
 3. `adaptive-reflection` analyzes evidence and proposes method/skill updates.
 
@@ -141,6 +141,10 @@ Hard rules:
      - ownership breaches,
      - premature execution,
      - weak validation strategy.
+   - For autonomous software-development loops, include stage-level signals:
+     repeated `blocked` or `rework` outcomes, skipped-stage disputes,
+     pre-handoff validation misses, design-validation failures, validation debt
+     accepted into closure, scope drift, and coordinator bypass attempts.
 
 4. **Extract successful method patterns**
    - Identify methods that repeatedly worked:
