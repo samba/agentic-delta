@@ -1,186 +1,228 @@
-# Integrated Skills Stack
+# Agentic Delta
 
-This repository is a working skill stack for improving execution quality over time, not just a collection of unrelated `SKILL.md` files.
+Agentic Delta is a durable coordination and continuous-improvement suite for
+constrained-autonomy software work. A user can state a goal in ordinary
+language; the suite persists it, researches and refines it, identifies human
+decisions, coordinates bounded work, enforces quality gates, and learns from
+the observed outcome.
 
-## AI Collaboration Note
-
-This project is managed with the aid of an AI coding agent. The skills in this repository were composed and refined conversationally with AI agents under human direction.
-
-The skills are designed to run as a loop:
-
-1. `kanban` coordinates work into explicit lanes with clear exit criteria and validation gates.
-2. `learning-ledger` records what happened (decisions, checkpoints, corrections, outcomes) in structured history.
-3. `adaptive-reflection` analyzes that history and converts recurring patterns into concrete process/skill updates.
-
-## Net Effect
-
-Used together, the stack produces compounding behavior:
-
-- better near-term delivery through clearer decomposition and coordination,
-- lower rework via explicit validation and blocker handling,
-- improved long-term method quality from evidence-backed reflection,
-- tighter separation between project-specific adjustments and reusable, general method improvements,
-- continuous self-upgrade of existing skills,
-- creation of new skills when repeated patterns justify a new reusable workflow.
-
-In short: execution generates evidence, evidence drives reflection, reflection upgrades existing skills and spins out new ones when needed.
-
-## Learning Tracks
-
-The integrated flow separates learning into two tracks:
-
-- `project-specific learning`: context-bound lessons tied to a specific repository, architecture, backlog, or operating constraints. These updates belong in project docs/process and should not be generalized as reusable skills.
-- `abstract method learning`: portable workflow improvements that remain valid after removing project-specific details. These updates belong in reusable skills and may justify new skill creation.
-
-This distinction prevents method drift and keeps reusable skills clean while still capturing high-value local project learning.
+Delta is the workflow governor. It does not replace product, architecture,
+security, implementation, supply-chain, or production specialists. It assigns
+implementation-neutral specialist classes and accepts their structured,
+evidence-backed recommendations while retaining control of workflow state and
+authority.
 
 ## Intended Use
 
-Use this project when you want an operational feedback system for agent work, especially for multi-step or parallelizable objectives where quality, traceability, and method improvement matter.
+Use this suite when work benefits from:
 
-Typical use pattern:
+- a durable goal and backlog that survive conversation or worker restarts;
+- proactive research before architecture or custom implementation;
+- explicit human decisions, constraints, budgets, and approval boundaries;
+- multiple specialist perspectives or independently reviewed work;
+- traceability from goal through decisions, design, tasks, criteria, and proof;
+- autonomous progress within a recorded permission and side-effect envelope;
+- bug capture, specialist-informed priority, and governed correction;
+- outcome-based learning and controlled improvement of project or agent method.
 
-1. Run execution with `kanban` for active objectives.
-2. Capture checkpoints and feedback events with `learning-ledger` during execution.
-3. Run `adaptive-reflection` on a defined timeframe (for example, last 2 days) to produce prioritized method deltas.
-4. Classify deltas into `project-specific learning` vs `abstract method learning`.
-5. Apply approved deltas by updating project-specific artifacts for the first track, and updating/adding skills for the second track.
-6. Repeat.
+For a transient question, deterministic one-step operation, or plan-only
+conversation, use the least-complex adequate path rather than creating a full
+autonomous workstream.
 
-Reflection output must include:
+## The Three Skills
 
-- an a priori knowledge audit (known facts, assumptions, and assumptions acted on without verification),
-- miss classification for each miss as `preventable` or `non-preventable` with rationale.
+- [`kanban`](skills/kanban/) is the coordinator and canonical project-state
+  owner. It captures goals, maintains the backlog, records decisions, freezes
+  guidance, dispatches bounded work, ingests specialist handoffs, applies
+  gates, routes rework, and controls closure.
+- [`learning-ledger`](skills/learning-ledger/) queries and analyzes canonical
+  Kanban history and metrics. It is not a parallel event store and cannot
+  change workflow state or policy.
+- [`adaptive-reflection`](skills/adaptive-reflection/) converts evidence over a
+  defined period into project improvements or reusable method proposals. It
+  cannot promote its own recommendations or weaken governing controls.
 
-## Repository Workflow
+Behavioral rules live inside these independently installable skill packages.
+This README explains composition; it is not a competing policy source.
 
-Treat this repository as the coordination layer for a skill lifecycle:
+## Standard Workflow
 
-1. Fork this repo and customize the skill stack for your team, domain, and operating standards.
-2. Adopt skills into each agent runtime by syncing selected directories from this repo into agent homes (for example `~/.codex/skills`, `~/.claude/skills`, `~/.cursor/skills`).
-3. Let agents execute, log, and reflect so skills evolve through real usage.
-4. Periodically run `make import` (or `make`) to re-import evolved `SKILL.md` directories from agent homes back into this repo.
-5. Review and version those updates, then reshare the refreshed skills with other agents and human operators.
+The order expresses dependencies and quality obligations. Safe research,
+refinement, and read-only review may overlap when ownership and evidence remain
+clear.
 
-Import mechanics:
+1. **Capture the goal.** Persist the objective, success measures, constraints,
+   non-goals, autonomy mode, approval boundaries, and stop conditions. Link all
+   executable work to the durable intent.
+2. **Enroll specialist classes.** Ask every active specialist to inspect the
+   goal early, propose sourced principles or verifiable tenets, and identify
+   missing context or consequential decisions.
+3. **Discover and research.** Inspect the project and proven local capability;
+   then research standards, platform primitives, maintained open source,
+   templates, and established products before proposing custom mechanisms.
+   Preserve candidates, rejected alternatives, sources, and verified gaps.
+4. **Resolve human decisions.** Ask only questions that safe inspection and
+   research cannot settle. Persist the choice, rationale, decider, affected
+   work, and safe work that may continue meanwhile.
+5. **Design the outcome and proof.** Establish a traceable product and
+   architecture contract, quality attributes, risks, failure behavior,
+   acceptance criteria, and validation strategy. Independent specialists
+   contribute assurance obligations before implementation hardens.
+6. **Plan bounded slices.** Create coherent, dependency-aware, reversible tasks
+   with explicit ownership, WIP limits, required gates, and immutable autonomy
+   envelopes covering paths, tools, network, credentials, cost, retries, side
+   effects, cancellation, and escalation.
+7. **Execute within the envelope.** Use isolated write ownership where work is
+   concurrent. Workers cannot broaden scope or authority, fabricate specialist
+   results, or treat confidence as proof.
+8. **Verify and review.** Bind criteria to exact artifact revisions and
+   reproducible evidence. Apply every expected gate or obtain the assigned
+   evaluator's evidenced `not-applicable` disposition. Independently review
+   non-trivial work and route defects to the earliest repair stage.
+9. **Deliver safely.** Require applicable security, supply-chain, migration,
+   rollback, operational-readiness, and authorization evidence. Persist side
+   effect and cancellation receipts.
+10. **Observe and close.** Realize the goal only when outcome criteria, gates,
+    evidence, risk decisions, validation debt, and follow-up disposition are
+    complete. Record material outcomes and corrections.
+11. **Improve deliberately.** Analyze trends and causal mechanisms, test the
+    smallest useful process change, and promote reusable method changes only
+    through evidence, research, review, evaluation, and rollback controls.
 
-- Source skill directories containing `SKILL.md` are copied into `./skills`; destination directories are replaced.
-- If duplicate skill names exist across sources, later iteration order in `Makefile` wins.
+## Assurance and Control
 
-## Federated Skill Sync
+Delta builds quality into work rather than relying only on inspection:
 
-Use [`skill-federation.yaml`](skill-federation.yaml) as the catalog of local
-tracking repositories, candidate remote repositories, tutorials, documents, and
-published skill artifacts. The catalog is YAML-compatible JSON so the sync
-helper can parse it with the Python standard library.
+- **Assurance** specialists contribute guidance and task-specific obligations
+  before or during production, tied to frozen tenets and verification methods.
+- **Control** specialists independently evaluate the artifact and evidence for
+  those obligations.
 
-Catalog sources carry policy metadata:
+All enrolled specialist classes are considered by default. A reviewer owns its
+applicability decision and may return `not-applicable` with examined scope and
+rationale. The coordinator cannot manufacture that result or convert an
+advisory recommendation into risk acceptance, permission, or delivery
+authority.
 
-- `trust_status`: `trusted`, `candidate`, `watchlist`, `reference`,
-  `rejected`, or `deprecated`.
-- `install_policy`: `installable`, `review-required`, `discovery-only`,
-  `reference-only`, or `blocked`.
-- `review_status`: `unreviewed`, `partially-reviewed`, or `reviewed`.
+## Existing Codebases and Bugs
 
-Use [`scripts/skill_federation.py`](scripts/skill_federation.py) for selective
-skill discovery and local installation:
+A request to review an existing codebase invokes every enrolled specialist
+against the project goal and effective guidance. Findings identify evidence,
+impact, and the earliest repair stage.
 
-```sh
-python3 scripts/skill_federation.py list --query "design validation"
-python3 scripts/skill_federation.py install --skill kanban --dry-run
-python3 scripts/skill_federation.py install --query "security scanning"
-python3 scripts/skill_federation.py install --skill test-strategy --allow-review-required --dry-run
-python3 scripts/skill_federation.py update --installed-only
-python3 scripts/skill_federation.py remove --skill kanban --dry-run
-```
+A discovered bug is recorded immediately as an observed-versus-expected
+discrepancy. Every enrolled specialist provides an applicability and impact
+assessment before the coordinator prioritizes the bug among remaining goal
+work. Correction proceeds through a linked governed task and normal gates.
 
-Kanban database access must go through the kanban helper. Agents must not run
-direct SQL or alternate SQLite clients, including for read-only inspection. If
-the helper lacks a required capability, raise a tooling-improvement request
-instead of bypassing it.
+## Improvement Strategy
 
-The helper supports:
+The suite combines built-in quality, Lean flow, constraint management, and
+kaizen without allowing learning to rewrite its own controls:
 
-- `list`: search cataloged installed and candidate skills by keyword, source, or
-  skill name.
-- `install`: copy a selected skill into an agent skill path.
-- `update`: refresh matching local skills from local or cached git sources.
-- `remove`: remove matching installed skills from the selected agent skill path.
+- version principles as durable outcome guidance and tenets as actionable
+  standard work with verification methods;
+- freeze applicable guidance for each task and derive assurance obligations at
+  the point of work;
+- track flow, quality, cost, latency, rework, escaped defects, rollback, and
+  human overrides together rather than optimizing one metric;
+- expose the active constraint and improve it instead of maximizing local
+  utilization;
+- append corrections and supersessions rather than rewriting history;
+- separate project-context learning from portable method change;
+- research established practices before changing reusable workflow;
+- evaluate improvements against a baseline, regression limits, and rollback.
 
-Selectors:
+## Durable State and Helpers
 
-- `--query <keywords>` matches source and skill names, capabilities, keywords,
-  and status.
-- `--skill <name>` selects an exact skill name. Repeat it for multiple skills.
-- `--source <id>` restricts the operation to one catalog source.
+The Kanban SQLite database is the canonical live store. Use
+[`kanban.py`](skills/kanban/scripts/kanban.py) for state operations and
+[`ledger.py`](skills/learning-ledger/scripts/ledger.py) for analysis, archival,
+and legacy import. Do not edit the database directly or treat interchange and
+archive files as a second live source of truth.
 
-Targets and safety:
+The handoff JSON schema is an interchange boundary. The database remains the
+authority for relational, workflow, evidence, and state constraints, and only
+an atomic ingestion receipt establishes acceptance.
 
-- By default, installs target `~/.codex/skills`; use `--agent claude`,
-  `--agent cursor`, or `--target-dir <path>` for other targets.
-- Use `--dry-run` before mutating an agent skill path.
-- `install` and `update` refuse `discovery-only`, `reference-only`, and
-  `blocked` sources.
-- `review-required` candidate sources require `--allow-review-required`.
-- `remove` refuses to delete anything outside the selected skill root and
-  refuses to delete directories that do not contain `SKILL.md`.
-- Runtime operation logs are written under the user-scope skill path by default:
-  `~/.codex/skills/.skill-federation/logs/skill-federation.ndjson`.
-  Do not store federation runtime logs in this repository.
+## Working With Agentic SRE
 
-## Skill Domain Boundary
+[Agentic SRE](https://github.com/samba/agentic-sre) supplies product,
+architecture, delivery, security, supply-chain, production, compatibility,
+diagnostic, code-convention, and change-record specialist behaviors. Delta
+stores required expertise as specialist classes rather than hard-coded skill
+names, allowing workers to activate an installed skill from delegated role
+context.
 
-This repository should only version skills that support the integrated execution-improvement loop: coordination/delegation, work history capture, reflection, learning classification, backlog synthesis, and evidence-backed method updates.
+The suites remain separate because they have distinct ownership:
 
-Before adding or syncing a skill into this repo, verify that it belongs to that loop. Systems engineering, Kubernetes, language/config generation, code style extraction, commit-message quality, OpenAI API usage, plugin authoring, document rendering, image generation, and general marketplace/installer skills belong in separate skill stacks unless they directly support the feedback-loop domain here.
-
-`make import` is intentionally broad: it copies every discovered `SKILL.md` directory from supported local agent homes into `./skills`, replacing same-named directories. Treat imported untracked skill directories as review candidates, not automatically accepted repo content. Remove irrelevant imported directories before staging changes.
+- Delta owns durable intent, orchestration, evidence acceptance, authority,
+  state transitions, closure, and method improvement.
+- SRE skills own domain analysis, production or review work, evidence, and
+  advisory gate recommendations.
 
 ## Example Prompts
 
-Use plain human language to trigger the stack behaviors.
+Start and autonomously coordinate a durable product goal:
 
-Background work (small scope):
+> My goal is to build and launch a self-service SaaS product for small clinics.
+> Persist this goal, research proven and open-source approaches, identify the
+> decisions I need to make, and coordinate the work within this repository.
+> Do not purchase services, create external accounts, or deploy production
+> resources without my approval.
 
-- "start background work: update the README examples section, fix any broken links, and report back when done."
-- "start background work: clean up Makefile comments and keep me posted without blocking this thread."
+Capture a goal but stop before execution:
 
-Background work (large scope):
+> Record a goal to replace our bespoke job scheduler with a maintained
+> solution. Research candidates, capture constraints and unresolved decisions,
+> and prepare the backlog, but do not implement anything yet.
 
-- "run workstream: refactor the skill templates for consistency, add validation checks, and prepare draft commits per lane."
-- "map workstream: split this into research, implementation, and verification lanes, with dependency order and validation gates."
+Review an existing codebase comprehensively:
 
-Kanban command grammar and status control:
+> Review this codebase against its stated product goal. Enroll every specialist
+> class, identify risks and deficiencies with evidence, route each finding to
+> the earliest repair stage, and propose a prioritized improvement backlog.
 
-- `work status` for board state, active/queued lanes, worker assignment, blockers, and recent completion evidence
-- `walk board` for one bounded board-maintenance pass
-- `plan work <goal>` for planning without execution
-- `map workstream <goal>` for autonomous-path mapping without execution
-- `start background work <goal>` for queued background execution
-- `run workstream <goal>` for autonomous queue-drain until no pullable work remains
-- `pause background work` / `resume background work` / `stop background work` for background control
-- `review completed work` / `close completed work` for completion handling
-- `refine backlog` / `prepare next work` for readiness work without implementation
+Register and prioritize a bug:
 
-Deprecated command phrases such as `delegate async`, `async <verb>`, `do
-kanban loop`, `do kanban flow`, `enter delegator mode`, and `active <verb>`
-should receive a concise replacement hint when they unambiguously invoke a
-workflow command. `walk the board` is an accepted conversational alias for
-`walk board`; do not reject it or suppress the substantive request.
+> Record a bug: users can submit the payment form twice when the first request
+> is slow. The expected behavior is at-most-once order creation. Obtain
+> specialist impact assessments, prioritize it with the existing backlog, and
+> action it when its rank and dependencies permit.
 
-Reflection loop induction:
+Ask for a decision-focused status update:
 
-- "Run a reflection on the last 2 days, classify project-context vs abstract-method deltas, and propose the next reinforcement actions."
-- "Improve your methods based on the past week of execution, including evidence-backed changes, deferred hypotheses, and any new skill candidates."
+> Report goal and board status, current WIP, gate state, blockers, validation
+> debt, and the next pullable work. Ask me only the material decisions that are
+> currently preventing safe progress.
 
-Sample reflection-loop output reports:
+Run evidence-gated improvement:
 
-- [Reflection Report Samples](docs/reflection-report-samples.md)
-- [Delegation-Derived Reflection Backlog Item (Sample)](docs/reflection-report-samples.md#delegation-derived-backlog-item-sample)
+> Reflect on the last 30 days of completed work. Analyze flow and quality
+> together, distinguish project lessons from reusable method changes, research
+> established approaches for each method proposal, and recommend only changes
+> with an evaluation and rollback plan.
 
-## Layout
+## Installation and Federation
 
-- [`Makefile`](Makefile): imports local skill directories into this repo
-- [`skill-federation.yaml`](skill-federation.yaml): federated skill source catalog
-- [`scripts/skill_federation.py`](scripts/skill_federation.py): selective skill list/install/update/remove helper
-- [`skills/`](skills/): consolidated skill definitions and references
+Each directory beneath [`skills/`](skills/) is independently installable.
+[`skill-federation.yaml`](skill-federation.yaml) catalogs public repositories
+and packages; [`skill_federation.py`](scripts/skill_federation.py) supports
+selective listing, installation, update, and removal.
+
+```sh
+python3 scripts/skill_federation.py list --query "software architecture"
+python3 scripts/skill_federation.py install --skill kanban --dry-run
+python3 scripts/skill_federation.py update --installed-only
+```
+
+Install reviewed sources at pinned revisions. Runtime logs belong in the
+configured user skill path, not this repository.
+
+## Repository Scope
+
+This repository contains coordination, durable workflow state, learning-data
+analysis, and evidence-gated method improvement. Domain specialist skills
+belong in their respective suites. Repository-level documents may provide
+examples or maintainer context, but functionally critical resources must remain
+inside the relevant skill directory.
