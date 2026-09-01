@@ -25,11 +25,9 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
             self.assertIn(delta["$id"], path.read_text(), path)
 
     def test_sre_skills_are_independently_packaged(self):
-        # kubectl and langgen remain outside the current refactor scope.
-        excluded = {"kubectl", "langgen"}
         link_pattern = re.compile(r"\[[^]]*\]\(([^)]+)\)")
         for skill in (SRE / "skills").iterdir():
-            if not skill.is_dir() or skill.name in excluded:
+            if not skill.is_dir():
                 continue
             files = list(skill.rglob("*.md")) + list(skill.rglob("*.yaml"))
             self.assertTrue((skill / "SKILL.md").is_file(), skill)
