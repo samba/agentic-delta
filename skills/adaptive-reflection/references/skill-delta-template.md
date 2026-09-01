@@ -54,3 +54,12 @@
 - Which existing skills overlap:
 - Merge vs split decision:
 - Follow-up revision candidate:
+# Evaluation and rollback
+
+- Baseline policy/version:
+- Evaluation set and deployment-like conditions:
+- Task-success result:
+- Policy-compliance result:
+- Regression limits:
+- Rollback condition and procedure:
+- Prior-policy reference:

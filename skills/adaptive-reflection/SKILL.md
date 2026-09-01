@@ -1,241 +1,86 @@
 ---
 name: adaptive-reflection
-description: Use when the user asks to reflect over a timeframe (for example, "reflect on the last 2 days"). Analyze thread outcomes, project changes, failure patterns, useful signals, and convert lessons into skill/process updates plus a focused research backlog.
+description: Use when reflecting over a defined timeframe or improving agent methods from durable outcomes, corrections, costs, failures, and workflow metrics; separate project lessons from reusable method changes and gate any promotion with research and evaluation.
 ---
 
 # Adaptive Reflection
 
-## Use This Skill When
+Produce a timeframe-bounded, evidence-based retrospective that improves future
+work without allowing learning to rewrite its own controls. Kanban provides
+workflow state; the learning ledger provides events and metrics; this skill
+interprets evidence and proposes reviewed changes.
 
-Use this skill when the user asks for reflection with a defined timeframe (explicit dates or relative windows like "last 48 hours").
+Read the [method promotion policy](references/promotion-policy.md) before
+adopting any project-process or reusable method change. It is the canonical
+source for partitioning, evidence, stability, applicability, research,
+portability, overlap, boundary, evaluation, review, and rollback gates.
 
-Also use this skill when the user asks to "improve your methods".
-
-## Integration
-
-This skill is part of an integrated method stack with:
-
-- `kanban`: coordinates execution lanes, stage gates, and validation gates.
-- `learning-ledger`: provides structured event/checkpoint history for reflection input.
-
-Expected flow:
-
-1. execution is coordinated by `kanban`,
-2. events and checkpoints are captured by `learning-ledger`,
-3. `adaptive-reflection` analyzes evidence and proposes method/skill updates.
-
-## Goal
-
-Produce a practical, evidence-based retrospective that improves next-iteration quality by:
-
-1. identifying what produced value,
-2. identifying what caused churn, rework, interruptions, or correction,
-3. tightening methods and criteria,
-4. converting lessons into reusable skills and references.
-
-## Operating Rules
-
-- Anchor the reflection to the requested timeframe.
-- In "improve your methods" mode, run deeper research and include all standing methodological backlog items in scope.
-- Prioritize evidence from:
-  - thread interactions and corrections,
-  - commits/diffs/tests/logs generated in that timeframe,
-  - plan docs and status artifacts.
-- Distinguish:
-  - high-value outcomes,
-  - neutral churn,
-  - negative-value work (rework, avoidable complexity, regressions).
-- Keep conclusions tied to concrete indicators.
-- Default to minimum-complexity process changes.
-- Require research support for adopted methodological adjustments.
-- If a proposed adjustment is not supported by research, stop and consult the user before adoption.
-- Convert durable lessons into skill updates or new skills only after passing the promotion gates below.
-- Create or update supporting reference material for those skills.
-
-## Promotion and Drift Controls
-
-Use the following gates before promoting a lesson into `abstract-method` or creating a new skill:
-
-- Evidence-quality gate: require at least 2 independent evidence points or 2 queue cycles, each with concrete refs.
-- Stability gate: require the pattern to persist after a recheck window or follow-up observation, not just in one noisy slice.
-- Applicability-signal gate: require at least one of:
-  - user assertion signal: the user explicitly states the refinement is broadly applicable beyond the project, with abstract field-relevant framing,
-  - field-research signal: external discipline references identify related practices/dynamics that support transferability.
-- Portability gate: remove project nouns, paths, and local constraints; the remaining rule must still be actionable.
-- Overlap gate: confirm the existing skill set does not already cover the pattern with a smaller update.
-- Boundary gate: define what the rule does not cover so it cannot expand into unrelated cases.
-- User-confirmation gate: for new skills, present the split/merge rationale and get explicit approval before adoption.
-
-If any gate fails, keep the item in `project-context`, defer it, or merge it into an existing skill instead of creating a new one.
-
-Decision precedence:
-
-Apply these rules in order when deciding whether a lesson should update project artifacts, update an existing skill, create a new skill, defer, reject, or remain a hypothesis. Stop at the first rule that decides the outcome.
-
-1. If the lesson is project-specific, keep it in project docs, project backlog, or project process artifacts. Do not update reusable skills with project-only policy, naming, paths, architecture, or local workflow constraints.
-2. If the lesson depends on one noisy incident, defer it until repeated evidence appears through independent evidence points, another queue cycle, or a follow-up observation.
-3. If an existing skill already covers the pattern, update that skill with the smallest clarifying change instead of creating a new skill.
-4. If the lesson would weaken a skill's core purpose, reject it even when it would be locally convenient or reduce immediate effort.
-5. If the lesson is broadly reusable but lacks external support or explicit user confirmation, keep it as an `abstract-method` hypothesis and do not adopt it yet.
-6. If the lesson is reusable, evidence-backed, portable after removing project context, and bounded by clear exclusions, update the smallest relevant skill.
-7. Create a new skill only when the behavior is reusable, materially distinct, repeatedly needed, explicitly confirmed by the user, and would make an existing skill incoherent if merged.
-8. If adoption later increases churn, ambiguity, or rework, deprecate or revert the rule and record the replacement rule or rollback reason.
-
-Anti-drift safeguards:
-
-- Prefer the smallest change that resolves the observed pattern.
-- Treat a single project or a single incident as insufficient for abstract-method promotion unless the pattern is independently repeated.
-- If a promoted abstract delta later increases churn, ambiguity, or rework, mark it as deprecated, revert it in the next revision, and note the replacement rule or rollback reason.
-- Maintain a brief stability note for each promoted delta: what stayed true, what changed, and what was not yet validated.
-- Record an applicability note for each promoted delta: intended discipline scope, transfer assumptions, and exclusion conditions.
-
-## Context Partitioning (Mandatory)
-
-All reflection artifacts must be partitioned into two explicit tracks:
-
-- `project-context`: backlog, hypotheses, and enhancements specific to the active project/repository.
-- `abstract-method`: reusable reasoning/workflow improvements independent of any single project or technology stack.
-
-Hard rules:
-
-- Do not leak project-specific policy, naming, paths, variables, or architecture into abstract skills.
-- Before analysis, run a classification gate for each topic: assign `track`, `evidence_scope`, `split_handling`, `applicability_realm`, and `applicability_signal`, then record a short reason summary.
-- `track` must be one of `project-context` or `abstract-method`.
-- `evidence_scope` should state whether the evidence is `project-only`, `cross-project`, or `generic`.
-- `split_handling` should state whether the topic is `single-track`, `paired`, or `defer`.
-- `applicability_realm` should state where the refinement is expected to hold (`project-only`, `project-family`, or `discipline-general`).
-- `applicability_signal` should state which promotion signal is currently present (`user-assertion`, `field-research`, `both`, or `none`).
-- Run a leakage audit on every `abstract-method` candidate; if it contains project-specific identifiers, keep it in `project-context` or split it into a paired delta.
-- If a candidate improvement contains project context, keep it in the project track only.
-- For each topic, produce paired outputs when relevant:
-  - project-specific delta (applied in project plans/docs/process),
-  - abstract skill delta (applied to reusable skill definitions).
-
+For enrollment, guidance proposals, existing-codebase review, and bug triage,
+follow the Kanban
+[project-specialist contract](../kanban/references/project-specialists-and-bugs.md).
+This specialty contributes measurable learning/improvement guidance; reviews
+systemic workflow deficiencies; and assesses bugs for recurrence, escape,
+rework, and learning impact.
 
 ## Workflow
 
-1. **Bound the window**
-   - Resolve absolute start/end timestamps.
-   - State assumptions when the window is ambiguous.
+1. Resolve the requested time window to absolute timestamps and state any
+   ambiguity.
+2. Collect thread corrections and decisions, linked intents/tasks/runs,
+   commits/diffs/tests/logs, gate outcomes, rework, costs, duration, human
+   overrides, delivery outcomes, and prior method baselines.
+3. Audit what was known before execution, what was assumed, and which
+   assumptions were acted on without verification.
+4. Classify each significant outcome as value, neutral churn, or negative
+   value, and each miss as `preventable` or `non-preventable` with evidence.
+5. Identify repeated success and failure mechanisms rather than merely listing
+   events. Include skipped-stage disputes, weak handoffs, design-validation
+   failures, validation debt, scope drift, repeated rework, and coordinator
+   bypass attempts when present.
+6. Partition every candidate into `project-context`, `abstract-method`, paired,
+   or deferred and apply the promotion policy before proposing adoption.
+7. Research precursor practices and established solutions for every proposed
+   method change. Record authority, version/date, retrieval date, finding,
+   relevance, limits, and relation to the previous basis.
+8. Define the smallest reinforcement, evaluation, regression limit, and
+   rollback condition. A valid result may be “no material evidence for a
+   method change.”
+9. Update project artifacts only for accepted project-context changes. Update
+   reusable skills only for accepted abstract-method changes, and only within
+   the current write and approval authority.
+10. Persist remaining research, hypotheses, and follow-ups in their respective
+    tracks.
 
-2. **Collect evidence**
-   - Extract thread signals: interruptions, corrections, approvals, reversals, explicit dislikes.
-   - Extract project signals: commit clusters, reverted work, repeated failure points, test outcomes.
-   - Extract plan-state signals: stale plans, blocked lanes, ownership-boundary drift.
-   - Run an a priori knowledge audit: facts known before execution, assumptions made, and assumptions acted on without verification.
+For “improve your methods,” include standing methodological backlog items in
+the window, but do not lower promotion gates to clear the backlog.
 
-2.5. **Classify topics before conclusions**
-   - Assign `track`, `evidence_scope`, `split_handling`, `applicability_realm`, and `applicability_signal` for each topic.
-   - Record a short reason summary for the classification.
-   - Run the leakage audit before any abstract-method delta is accepted.
+## Required Output
 
-3. **Assess value and friction**
-   - For each major workstream, classify:
-     - value delivered,
-     - cost/churn introduced,
-     - fit to project goals.
-   - Classify each miss as `preventable` or `non-preventable`.
-   - Use `preventable` when available evidence, checks, or constraints should reasonably have avoided it; use `non-preventable` when the miss depended on unknown or changed external conditions that were not reasonably verifiable in time.
-   - Identify failure patterns:
-     - over-complexity,
-     - ownership breaches,
-     - premature execution,
-     - weak validation strategy.
-   - For autonomous software-development loops, include stage-level signals:
-     repeated `blocked` or `rework` outcomes, skipped-stage disputes,
-     pre-handoff validation misses, design-validation failures, validation debt
-     accepted into closure, scope drift, and coordinator bypass attempts.
+Use [the reflection template](references/reflection-output-template.md), while
+treating the promotion policy—not repeated template wording—as normative.
+Return:
 
-4. **Extract successful method patterns**
-   - Identify methods that repeatedly worked:
-     - diagnosis loop quality,
-     - decomposition and delegation quality,
-     - test gating quality,
-     - review/feedback integration speed.
-   - Record measurable signals that predicted success.
+- timeframe and evidence coverage;
+- highest-signal value, friction, corrections, and preventability findings;
+- a priori knowledge and assumption audit;
+- project-context actions;
+- abstract-method candidates with every promotion gate result;
+- accepted changes with baseline, evaluation, regression and rollback data;
+- deferred/rejected candidates and reasons;
+- research and hypothesis backlogs;
+- stability or deprecation notes for prior promoted rules;
+- calibration of routing weights or thresholds only when outcome evidence
+  actually supports a change.
 
-5. **Define reinforcement actions**
-   - Produce concrete practice updates:
-     - what to do more,
-     - what to stop,
-     - what to gate with criteria.
-   - Keep each action small, testable, and enforceable.
+Templates for detailed capture are
+[skill delta](references/skill-delta-template.md) and
+[research backlog](references/research-backlog-template.md). They are output
+formats, not additional policy sources.
 
-5.5. **Run precursor research and applicability mapping (mandatory before promotion)**
-   - For each candidate refinement (`project-context` and `abstract-method`), run a short precursor research pass before derivation.
-   - Record precursor research artifacts for each candidate:
-     - search keywords for future retrieval,
-     - early findings from initial research,
-     - reference links to proof material.
-   - Map the likely realm of applicability (`project-only`, `project-family`, `discipline-general`) and record why.
-   - Use at least one of:
-     - explicit user assertion of broad applicability in abstract field terms,
-     - external discipline research on comparable practices/dynamics.
-   - If neither signal exists, keep the refinement as `project-context` or mark it `defer` pending research.
+## Authority Boundary
 
-6. **Encode learnings into two-fold deltas**
-   - For each durable lesson, decide whether it belongs to:
-     - `project-context`,
-     - `abstract-method`,
-     - or both (as paired deltas).
-   - Apply the decision precedence before selecting the delta type.
-   - Update project artifacts only with project-context deltas.
-   - Update reusable skills only with abstract-method deltas.
-   - Add supporting references (templates/checklists/decision rules) to the matching track.
-   - Before accepting an abstract-method delta, pass the evidence-quality, stability, applicability-signal, portability, overlap, and boundary gates.
-   - Before creating a new skill, require the same gates plus an explicit split/merge decision and user confirmation.
-   - Prefer simple reusable workflows over broad policy prose.
-   - When a coordination skill uses weighted routing or thresholds, review whether outcomes justify recalibrating:
-     - dimension weights,
-     - score thresholds,
-     - hard-trigger override rules.
-   - Only adjust those values when evidence shows repeated over- or under-routing relative to actual complexity, churn, or validation burden.
-
-7. **Build partitioned backlogs and hypotheses**
-   - Maintain separate backlog and hypothesis lists for:
-     - `project-context`,
-     - `abstract-method`.
-   - Keep rationale and validation signals scoped to the same track.
-   - Rank each track by expected impact and near-term applicability.
-
-8. **Improve-your-methods mode (when requested)**
-   - Resolve all standing methodological backlog items first.
-   - Produce only high-confidence, high-relevance adjustments supported by research.
-   - Separate:
-     - research-backed adjustments (ready to adopt),
-     - hypothesis adjustments (require user consultation before adoption).
-   - Do not promote a hypothesis into `abstract-method` until it survives a follow-up check and the overlap/boundary gates still hold.
-
-9. **Return deliverables**
-   - Use the template in `references/reflection-output-template.md`.
-   - Include:
-     - summary of highest-signal findings,
-     - prioritized next actions,
-     - skill/references created or updated,
-     - proposed research subjects.
-
-## Required Deliverables
-
-- A timeframe-bounded reflection report.
-- A prioritized list of reinforcement actions.
-- A concise reason summary for each topic classification or split decision.
-- An a priori knowledge audit covering known facts, assumptions made, and assumptions acted on without verification.
-- Miss classification for each miss, labeled `preventable` or `non-preventable` with a brief rationale.
-- Two-fold delta list:
-  - project-context deltas (project-only),
-  - abstract-method deltas (skill-level reusable).
-- For each abstract-method delta, record evidence quality, stability check, applicability signal(s), overlap check, portability check, boundary definition, and applicability realm.
-- For each new skill, record the split/merge rationale and the user confirmation point.
-- Two-track research/hypothesis backlog with impact rationale per track.
-- In "improve your methods" mode:
-  - a backlog-resolution report,
-  - a list of research-backed method changes,
-  - a separate consultation list for non-research-backed hypotheses.
-  - when weighted coordination routing is in use, a short calibration note stating whether current weights and thresholds should stay fixed or be adjusted.
-  - a deprecation/rollback note for any previously promoted delta that no longer holds.
-
-## Reference Material
-
-- Reflection output structure: [references/reflection-output-template.md](references/reflection-output-template.md)
-- Skill delta capture template: [references/skill-delta-template.md](references/skill-delta-template.md)
-- Research backlog template: [references/research-backlog-template.md](references/research-backlog-template.md)
+Reflection may recommend changes. It may not weaken security, permissions,
+autonomy, evidence, review, or release controls; promote a project observation
+without the policy gates; treat one success or failure as sufficient evidence;
+or silently replace historical rules and sources. A change beyond current
+authority remains a proposal for human review.
