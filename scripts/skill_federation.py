@@ -154,24 +154,27 @@ def materialize_source(
     dry_run: bool = False,
 ) -> Path | None:
     kind = source.get("kind")
-    if kind == "local_repo":
-        path = source.get("local_path")
-        return expand(path) if path else None
     if kind != "git_repo":
         return None
     repo_url = source.get("repo_url")
     if not repo_url:
         return None
+    revision = source.get("revision")
+    if source.get("revision_required") and not revision:
+        raise SystemExit(
+            f"Source {source.get('id')} requires a pinned revision; publish the current suite and update the catalog first"
+        )
     dest = git_cache_path(cache, source)
     if dry_run:
         return dest
     if dest.exists():
         if update:
             run(["git", "fetch", "--all", "--prune"], cwd=dest)
-            run(["git", "pull", "--ff-only"], cwd=dest)
     else:
         dest.parent.mkdir(parents=True, exist_ok=True)
         run(["git", "clone", repo_url, str(dest)])
+    if revision:
+        run(["git", "checkout", "--detach", revision], cwd=dest)
     return dest
 
 
@@ -201,8 +204,15 @@ def copy_skill(src: Path, target_root: Path, dry_run: bool) -> Path:
     dest = target_root / src.name
     if dry_run:
         return dest
+    target_root.mkdir(parents=True, exist_ok=True)
     if dest.exists():
-        shutil.rmtree(dest)
+        stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_root = target_root / ".skill-federation-backups"
+        backup_root.mkdir(parents=True, exist_ok=True)
+        backup = backup_root / f"{src.name}-{stamp}"
+        if backup.exists():
+            raise SystemExit(f"Backup destination already exists: {backup}")
+        shutil.move(str(dest), str(backup))
     shutil.copytree(src, dest)
     return dest
 
@@ -237,7 +247,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         source = record["source"]
         skill = record["skill"]
         policy = source_policy(catalog, source)
-        locator = source.get("repo_url") or source.get("url") or source.get("local_path", "")
+        locator = source.get("repo_url") or source.get("url", "")
         print(
             f"{skill.get('name')} [{skill.get('status', 'unknown')}] "
             f"source={source.get('id')} "

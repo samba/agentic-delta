@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated": "2026-08-23",
-  "purpose": "Federated catalog of local tracking repositories and published skill sources for agentic software-development workflows.",
+  "updated": "2026-08-31",
+  "purpose": "Federated catalog of publicly reachable repositories and published skill sources for agentic software-development workflows.",
   "default_cache_dir": ".cache/skill-federation",
   "default_log": "~/.codex/skills/.skill-federation/logs/skill-federation.ndjson",
   "default_install_targets": [
@@ -19,11 +19,6 @@
     }
   ],
   "policy_defaults": {
-    "local_repo": {
-      "trust_status": "trusted",
-      "install_policy": "installable",
-      "review_status": "reviewed"
-    },
     "git_repo": {
       "trust_status": "candidate",
       "install_policy": "review-required",
@@ -48,11 +43,17 @@
   "sources": [
     {
       "id": "agentic-delta",
-      "kind": "local_repo",
+      "kind": "git_repo",
       "name": "Agentic Delta",
       "repo_url": "https://github.com/samba/agentic-delta.git",
       "repo_url_provenance": "git-remote",
-      "local_path": "/home/samba/Projects/agentic-delta",
+      "revision": null,
+      "revision_required": true,
+      "publication_status": "pending-commit",
+      "handoff_contract_version": "2",
+      "trust_status": "trusted",
+      "install_policy": "installable",
+      "review_status": "reviewed",
       "skills_path": "skills",
       "keywords": ["coordination", "workflow", "reflection", "telemetry", "kanban"],
       "skills": [
@@ -81,11 +82,13 @@
     },
     {
       "id": "agentic-data",
-      "kind": "local_repo",
+      "kind": "git_repo",
       "name": "Agentic Data",
       "repo_url": "https://github.com/samba/agentic-data.git",
       "repo_url_provenance": "git-remote",
-      "local_path": "/home/samba/Projects/agentic-data",
+      "trust_status": "trusted",
+      "install_policy": "installable",
+      "review_status": "reviewed",
       "skills_path": "skills",
       "keywords": ["data", "research", "database", "statistics", "geospatial"],
       "skills": [
@@ -135,11 +138,17 @@
     },
     {
       "id": "agentic-sre",
-      "kind": "local_repo",
+      "kind": "git_repo",
       "name": "Agentic SRE",
       "repo_url": "https://github.com/samba/agentic-sre.git",
       "repo_url_provenance": "git-remote",
-      "local_path": "/home/samba/Projects/agentic-sre",
+      "revision": null,
+      "revision_required": true,
+      "publication_status": "pending-commit",
+      "handoff_contract_version": "2",
+      "trust_status": "trusted",
+      "install_policy": "installable",
+      "review_status": "reviewed",
       "skills_path": "skills",
       "keywords": ["sre", "systems", "security", "kubernetes", "code style", "commits"],
       "skills": [
@@ -156,6 +165,51 @@
           "status": "installed",
           "capabilities": ["structured config parsing", "grammar derivation", "AST validation"],
           "keywords": ["grammar", "parser", "config", "ast"]
+        },
+        {
+          "name": "software-product-discovery",
+          "path": "skills/software-product-discovery",
+          "status": "installed",
+          "workflow_stage": "discovery",
+          "handoff_contract_version": "2",
+          "capabilities": ["product contract", "user and outcome discovery", "reuse research", "validation slice definition"],
+          "keywords": ["product discovery", "requirements", "users", "outcomes", "open source"]
+        },
+        {
+          "name": "software-architecture",
+          "path": "skills/software-architecture",
+          "status": "installed",
+          "workflow_stage": "architecture",
+          "handoff_contract_version": "2",
+          "capabilities": ["architecture tradeoff evaluation", "system boundary design", "ADR production", "fitness check definition"],
+          "keywords": ["architecture", "quality attributes", "adr", "contracts", "reuse"]
+        },
+        {
+          "name": "software-delivery",
+          "path": "skills/software-delivery",
+          "status": "installed",
+          "workflow_stage": "implementation",
+          "handoff_contract_version": "2",
+          "capabilities": ["bounded implementation", "risk-selected validation", "revision-bound evidence", "independent review handoff"],
+          "keywords": ["delivery", "implementation", "testing", "review", "continuous delivery"]
+        },
+        {
+          "name": "software-supply-chain",
+          "path": "skills/software-supply-chain",
+          "status": "installed",
+          "workflow_stage": "supply-chain",
+          "handoff_contract_version": "2",
+          "capabilities": ["dependency health assessment", "provenance verification", "license and SBOM review", "update and replacement planning"],
+          "keywords": ["supply chain", "dependencies", "provenance", "sbom", "license"]
+        },
+        {
+          "name": "production-readiness",
+          "path": "skills/production-readiness",
+          "status": "installed",
+          "workflow_stage": "production-readiness",
+          "handoff_contract_version": "2",
+          "capabilities": ["SLO and error-budget definition", "observability review", "release and recovery safety", "operational ownership validation"],
+          "keywords": ["production readiness", "slo", "observability", "rollback", "incident response"]
         },
         {
           "name": "learn-code-style",
@@ -191,51 +245,6 @@
           "status": "installed",
           "capabilities": ["known-good baseline recovery", "ambiguous validation diagnosis"],
           "keywords": ["diagnose", "recovery", "baseline", "runtime"]
-        }
-      ]
-    },
-    {
-      "id": "agentic-docs",
-      "kind": "local_repo",
-      "name": "Agentic Docs",
-      "repo_url": "https://github.com/samba/agentic-docs.git",
-      "repo_url_provenance": "inferred-from-project-name",
-      "local_path": "/home/samba/Projects/agentic-docs",
-      "skills_path": "skills",
-      "keywords": ["documents", "markdown", "rendering", "pdf", "epub", "html"],
-      "skills": [
-        {
-          "name": "document-render-regression-guard",
-          "path": "skills/document-render-regression-guard",
-          "status": "installed",
-          "capabilities": ["document render regression validation", "PDF/EPUB/HTML layout checks"],
-          "keywords": ["pdf", "epub", "html", "render", "regression"]
-        },
-        {
-          "name": "safe-markdown-transform",
-          "path": "skills/safe-markdown-transform",
-          "status": "installed",
-          "capabilities": ["safe markdown rewrite validation", "deterministic rollback points"],
-          "keywords": ["markdown", "rewrite", "transform", "rollback"]
-        }
-      ]
-    },
-    {
-      "id": "agentic-engineering",
-      "kind": "local_repo",
-      "name": "Agentic Engineering",
-      "repo_url": "https://github.com/samba/agentic-engineering.git",
-      "repo_url_provenance": "inferred-from-project-name",
-      "local_path": "/home/samba/Projects/agentic-engineering",
-      "skills_path": "skills",
-      "keywords": ["engineering", "physical systems", "cad", "bom", "prototype"],
-      "skills": [
-        {
-          "name": "physical-systems-engineering",
-          "path": "skills/physical-systems-engineering",
-          "status": "installed",
-          "capabilities": ["physical system design validation", "CAD/BOM validation", "solver-guided prototype checks"],
-          "keywords": ["physical", "cad", "bom", "mechanical", "prototype"]
         }
       ]
     },
