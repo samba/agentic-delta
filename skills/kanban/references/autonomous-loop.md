@@ -5,6 +5,10 @@ advance through a background, evidence-gated loop. The loop applies to product,
 library, infrastructure, data, documentation, and skill implementation work; do
 not specialize the loop around skill editing.
 
+This loop implements `standard-of-excellence.md`; that contract takes
+precedence when this reference is silent. Read its source register when a stage
+adds or changes a governing principle.
+
 ## Foreground And Background
 
 Keep the foreground thread for goal intake, short interview cycles, planning
@@ -21,7 +25,7 @@ closure proof. Stage agents own the judgment for their stage.
 Use this default flow unless the project declares a stricter process:
 
 ```text
-Goal Intake -> Interview -> Discovery/Research -> Design Draft ->
+Goal Capture -> Triage/Interview -> Discovery/Research -> Design Draft ->
 Design Validation -> Implementation -> Runtime Verification -> Review ->
 Commit/PR
 ```
@@ -39,12 +43,9 @@ for a stage may classify that stage as not applicable.
 
 ## Stage-Owned Applicability
 
-Each stage records one of:
-
-- `applied`: the stage performed substantive work or validation.
-- `skipped-not-applicable`: the stage's own documented skip criteria were met.
-- `blocked`: required inputs, permissions, or environment are missing.
-- `rework`: the task is returned to the responsible earlier stage.
+Each stage independently records `applicability` as `applicable`,
+`not-applicable`, or `undetermined`, then records the canonical gate
+recommendation and execution status from `execution-contracts.md`.
 
 A skip is an executed stage. The stage must record the criteria, evidence, and
 why the remaining risk is acceptable for this task. Examples:
@@ -69,8 +70,9 @@ artifact forward and rely on the next stage to discover the deficiency.
 
 Use compact artifacts with enough structure for the next stage:
 
-- Goal Intake: goal contract with objective, users, non-goals, constraints,
-  autonomy boundaries, stop conditions, and acceptance criteria.
+- Goal Capture: persisted goal contract with objective, users, non-goals,
+  constraints, autonomy boundaries, budgets, stop conditions, and acceptance
+  criteria; acknowledge the intent id before substantive work.
 - Interview: clarified goal contract plus unresolved questions and default
   assumptions.
 - Discovery/Research: evidence brief covering project-local precedent, relevant
@@ -89,6 +91,15 @@ Use compact artifacts with enough structure for the next stage:
 - Review: accept/rework decision with severity-ranked findings and evidence.
 - Commit/PR: release handoff with commit hash or no-commit reason, final tests,
   design/doc updates, and follow-up cards.
+
+Discovery also returns a reuse assessment: existing project capability,
+platform-native options, maintained open-source libraries or templates,
+selection criteria, rejected alternatives, and any verified gap requiring
+custom code. Design Validation returns `rework` for avoidable reinvention.
+
+For durable or autonomous work, apply the envelope, gate, evidence, specialist
+handoff, and recovery semantics in
+[execution-contracts.md](execution-contracts.md).
 
 ## Design Validation Gate
 
@@ -169,7 +180,29 @@ Record rework events with `failed_stage`, `failure_class`,
 `resume_condition` when the board helper supports those fields; otherwise use a
 task event or backlog note.
 
-## Retry And Checkpoint Policy
+## Human Decisions
+
+Persist authority or judgment calls as decision records. Ask only after local
+inspection and safe research cannot resolve the issue. Provide bounded options,
+a recommendation/default, impact of delay, and safe parallel work. A default
+may be applied without an answer only for reversible low-risk choices already
+inside the approved autonomy boundary. Silence never approves a privileged,
+destructive, externally consequential, goal-changing, or high-residual-risk
+action.
+
+After resolution, update every dependent plan/task before resuming it and
+retain the decision rationale. Use clarification records only for factual
+unknowns.
+
+## Autonomy Budget
+
+Before dispatch record applicable limits for time, model/tool cost, total and
+per-failure retries, concurrent workers, write scope, network destinations,
+credentials, and side effects. If the runtime cannot enforce a limit, label it
+as an observed or manual control. Budget exhaustion routes to a checkpoint; it
+does not authorize silent expansion.
+
+## Retry And Checkpoint Rules
 
 Prefer bounded rework over linear retries:
 

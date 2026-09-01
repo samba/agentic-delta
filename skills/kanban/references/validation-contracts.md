@@ -6,6 +6,11 @@ data pipelines.
 
 ## Contract Fields
 
+For non-trivial work, persist these fields through the structured evidence and
+gate records described in [execution-contracts.md](execution-contracts.md).
+Free-form evidence is supplementary and cannot substitute for an artifact
+revision, criterion, probe, result, producer, and reviewer.
+
 - `target`: artifact, behavior, claim, commit, card, dataset, or pipeline being validated.
 - `scope`: what the validator may inspect.
 - `prohibited_scope`: what the validator must not edit, infer, or touch.
@@ -46,8 +51,8 @@ Check:
   chain, and concurrency are either applied or skipped by their own criteria.
 
 Design validation must not be bypassed by the coordinator. Each category or
-stage agent owns its own `applied`, `skipped-not-applicable`, `blocked`, or
-`rework` record.
+stage agent owns its applicability, canonical recommendation, execution status,
+and evidence.
 
 ## Data Pipeline Validation
 
@@ -84,7 +89,9 @@ For stage validation, include:
 
 ```text
 Stage: <stage>
-Status: applied|skipped-not-applicable|blocked|rework
+Applicability: applicable|not-applicable|undetermined
+Recommendation: pass|fail|blocked|not-applicable
+Status: complete|rework|blocked|not-applicable|budget-exhausted|authorization-required
 Criteria:
 - <criteria used>
 Evidence:

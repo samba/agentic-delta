@@ -1,6 +1,6 @@
 interface:
   display_name: "Kanban"
   short_description: "Plan, walk, and run workstreams through kanban"
-  default_prompt: "Use $kanban to manage planning, backlog grooming, work status, board walks, workstream mapping, background execution, review, and closure through project-declared kanban columns, SQLite-backed cards, WIP limits, backfill goals, readiness gates, theme principles, review-first and WSJF priority discipline, explicit validation, and completion proof."
+  default_prompt: "Use $kanban to persist durable goals, coordinate source-backed research and human decisions, and manage planning, background execution, review, and closure under the standard of excellence with project-declared workflow, WIP limits, evidence-backed readiness, controlled autonomy, independent validation, provenance, and completion proof."
 policy:
   allow_implicit_invocation: true

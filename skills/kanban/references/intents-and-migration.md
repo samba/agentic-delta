@@ -1,5 +1,9 @@
 # Intents, Research, And Legacy Migration
 
+For durable human goals, apply `standard-of-excellence.md`: capture the goal
+contract before substantive work, link research and decisions, and preserve
+superseded source interpretations rather than overwriting their history.
+
 ## Intent model
 
 An intent is a human-originated objective that is worth understanding or

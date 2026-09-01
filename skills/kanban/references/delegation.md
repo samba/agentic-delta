@@ -7,6 +7,9 @@ otherwise asks for background, queued, autonomous, or parallel work.
 Always read `references/commands.md` first. Deprecated workflow phrases must
 warn and stop before this workflow starts.
 
+Read `references/standard-of-excellence.md` for every delegated durable goal.
+Goal persistence and safe queueing happen before the fast foreground handoff.
+
 For software-development objectives that need an evidence-gated autonomous
 stage flow, also read `references/autonomous-loop.md`. That reference defines
 foreground/background separation, stage-owned applicability decisions,
@@ -86,8 +89,8 @@ Keep at least one coordinator lane for active delegated objectives. Queue implem
 When a task is first delegated:
 
 1. Restate the goal as one sentence.
-2. Load project kanban state when present.
-3. Create the minimum coordinator, research, or planning cards needed to reason safely.
+2. Load or initialize project kanban state and capture or locate the durable intent.
+3. Acknowledge its intent id and create the minimum coordinator, research, or planning cards needed to reason safely.
 4. If the work has sensitive operational, security, privacy, or performance tradeoffs, create a research-first prerequisite and do not queue implementation ahead of it.
 5. Dispatch background lanes and return foreground control within 1 minute.
 6. In background, research proven options before expanding implementation;
@@ -95,13 +98,19 @@ When a task is first delegated:
    implementation implications into kanban records for later human review.
 7. Draft or update the design packet for non-trivial software work.
 8. Run design validation before implementation. Each stage/category agent owns
-   its own `applied`, `skipped-not-applicable`, `blocked`, or `rework`
-   decision and records evidence.
+   its applicability, canonical recommendation, execution status, and evidence.
 9. Score complexity and ambiguity, then choose lane rigor.
 10. Run the coupling preflight and define ownership boundaries.
 11. Pull only ready cards into Active, respecting WIP limits and backfill goals.
+12. Record applicable autonomy budgets and open human decisions; dispatch safe
+    independent work while a non-global decision waits.
 
 ## Lane Contract
+
+Autonomous lanes additionally receive the immutable autonomy envelope defined
+in [execution-contracts.md](execution-contracts.md). Federated workers return
+that reference's specialist handoff. Worker output is advisory until the
+coordinator validates its contract and records the applicable gate result.
 
 Each lane must have:
 
@@ -127,20 +136,23 @@ Do not accept lane closure when the completion payload is missing. Continue or r
 
 Implementation cards require all of:
 
-- confidence `>=99%`;
-- scope readiness `>=99%`;
-- success criteria readiness `>=99%`;
-- constraints/requirements readiness `>=99%`;
-- implementation plan readiness `>=99%`;
-- design-validation readiness `>=99%`, or an explicit design-validation skip
+- explicit scope and non-goals;
+- observable success criteria;
+- resolved constraints, authority boundaries, permissions, and dependencies;
+- a confirmed implementation and rollback/revert plan;
+- a concrete validation strategy mapped to the success criteria;
+- a passed design-validation record, or an explicit design-validation skip
   record for a trivial task whose criteria are met;
 - confirmed plan.
 
+Readiness percentages may summarize judgment but cannot satisfy or override a
+missing entry artifact. The coordinator must cite the evidence for each gate.
+
 Research, planning, clarification, and validation-design cards may run below this threshold when their purpose is to raise readiness. If a broad objective is not ready, split out the smallest planning or research card that can make it ready.
 
-The coordinator may not skip stages by risk classification. Every stage runs and
-the stage agent records `applied`, `skipped-not-applicable`, `blocked`, or
-`rework` using its own criteria.
+The coordinator may not skip stages by risk classification. Every expected
+stage is evaluated and its agent records applicability, recommendation, and
+status using its own criteria.
 
 ## Lane Cost Alignment
 
@@ -192,7 +204,9 @@ decisions as task events or metadata with:
 
 ```text
 stage=<stage>
-status=applied|skipped-not-applicable|blocked|rework
+applicability=applicable|not-applicable|undetermined
+gate_recommendation=pass|fail|blocked|not-applicable
+status=complete|rework|blocked|not-applicable|budget-exhausted|authorization-required
 failure_class=<class>
 returned_to_stage=<stage>
 repair_required=<specific repair>

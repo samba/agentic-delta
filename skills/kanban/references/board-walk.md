@@ -72,6 +72,10 @@ implement unless the user also gives an execution command.
    - Persist decisions, rejected alternatives, assumptions, and downstream implications in backlog notes or revised summaries so the human can review the reasoning before implementation relies on it.
    - Persist refinements to `.kanban/kanban.db`: split complex intents into smaller executable work items, retain useful broad intents as context, link work items to intents, record dependencies, and mark only items that satisfy readiness rules as ready.
    - Keep refinement behind review-first and WIP discipline: do not use backlog grooming to avoid closing Review, advancing Active work, or respecting WIP limits.
+   - Include registered bugs in the same priority field as planned work. Obtain
+     every enrolled specialist disposition before final rank; compare goal
+     impact, user harm, urgency, risk, dependencies, constraint effects, and
+     cost of delay rather than maintaining a disconnected defect queue.
    - In the board-walk report, summarize refinement changes, decisions captured for review, and identify the smallest next board operation that improves flow.
 
 6. Continue only when requested by an execution command.
@@ -120,6 +124,8 @@ For `work status`, `work progress`, or `progress`, include:
 - queued, blocked, or deferred lanes/cards;
 - known workers and assignments when background work exists;
 - blocking clarification questions near the top;
+- open human decisions near the top, with their linked intent/task, options,
+  recommendation/default, impact of delay, and safe work continuing;
 - non-blocking clarification questions after progress, with default assumptions;
 - completion results, validation outcomes, and commit hashes not already reported recently.
 
