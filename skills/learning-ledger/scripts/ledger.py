@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Project-local learning ledger helper.
 
-The CLI intentionally stays small: append structured events, inspect them,
-rotate raw daily ledgers into deterministic compressed artifacts, build compact
-7-day aggregates, and prune old artifacts.
+The CLI intentionally stays small: append and inspect canonical database
+events, export deterministic compressed artifacts, build compact seven-day
+aggregates, import legacy ledgers, and prune derived artifacts.
 """
 
 from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
+import importlib.util
 import json
 import sys
 from collections import Counter
@@ -22,9 +24,19 @@ RAW_RETENTION_DAYS = 7
 DAILY_RETENTION_DAYS = 35
 AGGREGATE_KEEP = 4
 MAX_COMPRESSED_BYTES = 1_000_000
+KANBAN_SCRIPT = Path(__file__).resolve().parents[2] / "kanban" / "scripts" / "kanban.py"
+KANBAN_SPEC = importlib.util.spec_from_file_location("agentic_delta_kanban", KANBAN_SCRIPT)
+if KANBAN_SPEC is None or KANBAN_SPEC.loader is None:
+    raise RuntimeError(f"Cannot load Kanban helper: {KANBAN_SCRIPT}")
+KANBAN = importlib.util.module_from_spec(KANBAN_SPEC)
+KANBAN_SPEC.loader.exec_module(KANBAN)
 
 ROLES = {"user", "assistant", "worker"}
-EVENT_TYPES = {"prompt", "response", "feedback", "decision", "checkpoint", "commit", "test"}
+EVENT_TYPES = {
+    "prompt", "response", "feedback", "decision", "checkpoint", "commit", "test",
+    "authorization", "gate", "evidence", "retry", "cancellation", "side_effect",
+    "exception",
+}
 TRACKS = {"execution", "reflection"}
 FEEDBACK_TAGS = {"approve", "correct", "interrupt", "revert", "redirect", "praise"}
 CHECKPOINT_TYPES = {"commit", "test", "plan", "release"}
@@ -81,6 +93,17 @@ def project_root(args: argparse.Namespace) -> Path:
 
 def ledger_root(args: argparse.Namespace) -> Path:
     return project_root(args) / args.ledger_dir
+
+
+def board_path(args: argparse.Namespace) -> Path:
+    raw = Path(args.db)
+    return raw.resolve() if raw.is_absolute() else project_root(args) / raw
+
+
+def board_connection(args: argparse.Namespace):
+    conn = KANBAN.connect(board_path(args))
+    KANBAN.init_db(conn, KANBAN.DEFAULT_SCHEMA_PATH)
+    return conn
 
 
 def rel_to_project(project: Path, path: Path) -> str:
@@ -294,20 +317,34 @@ def build_event(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_append(args: argparse.Namespace) -> None:
-    project = project_root(args)
-    root = ledger_root(args)
     event = build_event(args)
-    path = raw_path(root, event_day(event))
-    storage_location = rel_to_project(project, path)
-    event["storage_scope"] = "project-local"
-    event["storage_location"] = storage_location
-    event["storage_compliance_result"] = compliance_for(storage_location)
-    if event["storage_compliance_result"] != "pass":
-        fail(f"Refusing non-project-local storage location: {storage_location}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json_dump(event) + "\n")
-    print(storage_location)
+    occurred_at = int(parse_ts(str(event["ts_utc"])).timestamp())
+    payload = dict(event)
+    conn = board_connection(args)
+    try:
+        KANBAN.learning_event_add(
+            conn,
+            str(event["event_type"]),
+            str(event["reason_summary"]),
+            str(event["context_track"]),
+            event.get("outcome_tag"),
+            json_dump(payload),
+            str(event.get("redaction_state", "redacted")),
+            event.get("intent_id"),
+            event.get("task_id"),
+            event.get("run_id"),
+            event.get("decision_id"),
+            event.get("gate_id"),
+            event.get("evidence_id"),
+            event.get("reference_id") or event.get("source_id"),
+            str(event["attempt_id"]) if event.get("attempt_id") is not None else None,
+            event.get("artifact_id") or event.get("artifact_ref"),
+            event.get("commit_ref") or event.get("checkpoint_ref") if event.get("checkpoint_type") == "commit" else None,
+            event.get("reviewer_id"),
+            occurred_at,
+        )
+    finally:
+        conn.close()
 
 
 def candidate_event_files(root: Path) -> list[Path]:
@@ -317,12 +354,53 @@ def candidate_event_files(root: Path) -> list[Path]:
     return sorted(files)
 
 
-def load_events(root: Path) -> list[dict[str, Any]]:
+def load_file_events(root: Path) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for path in candidate_event_files(root):
         events.extend(iter_jsonl(path))
     events.sort(key=lambda event: str(event.get("ts_utc", "")))
     return events
+
+
+def load_database_events(
+    args: argparse.Namespace, since: int | None = None, until: int | None = None
+) -> list[dict[str, Any]]:
+    conn = board_connection(args)
+    try:
+        rows = KANBAN.query_learning_events(
+            conn, None, None, None, None, since, until, None
+        )
+    finally:
+        conn.close()
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        event = dict(payload)
+        event.update({
+            "event_id": row["id"],
+            "ts_utc": iso_z(datetime.fromtimestamp(row["occurred_at"], UTC)),
+            "event_type": row["event_type"],
+            "context_track": row["context_track"],
+            "reason_summary": row["reason_summary"],
+            "outcome_tag": row.get("outcome"),
+        })
+        for key in ("intent_id", "task_id", "run_id", "decision_id", "gate_id",
+                    "evidence_id", "reference_id", "attempt_id", "artifact_ref",
+                    "commit_ref", "reviewer_id"):
+            if row.get(key) is not None:
+                event[key] = row[key]
+        events.append(event)
+    return events
+
+
+def load_metric_snapshots(
+    args: argparse.Namespace, since: int | None = None, until: int | None = None
+) -> list[dict[str, Any]]:
+    conn = board_connection(args)
+    try:
+        return KANBAN.query_metric_snapshots(conn, since=since, until=until)
+    finally:
+        conn.close()
 
 
 def matches_query(event: dict[str, Any], args: argparse.Namespace) -> bool:
@@ -341,8 +419,7 @@ def matches_query(event: dict[str, Any], args: argparse.Namespace) -> bool:
 
 
 def cmd_list(args: argparse.Namespace) -> None:
-    root = ledger_root(args)
-    events = [event for event in load_events(root) if matches_query(event, args)]
+    events = [event for event in load_database_events(args) if matches_query(event, args)]
     if args.limit:
         events = events[-args.limit :]
     if args.json:
@@ -364,29 +441,57 @@ def cmd_list(args: argparse.Namespace) -> None:
 
 
 def days_to_rotate(args: argparse.Namespace) -> list[date]:
-    root = ledger_root(args)
     if args.date:
         return [parse_day(args.date)]
     today = utc_now().date()
-    days = []
-    for path in sorted((root / "raw").glob("*.ndjson")):
-        day = parse_day(path.stem)
-        if args.all or day < today:
-            days.append(day)
-    return days
+    if args.all:
+        return sorted({parse_ts(str(event["ts_utc"])).date() for event in load_database_events(args)})
+    return [today - timedelta(days=1)]
+
+
+def record_archive(
+    args: argparse.Namespace,
+    path: Path,
+    events: list[dict[str, Any]],
+    preserved_signal: str,
+    dropped_detail: str,
+) -> None:
+    event_ids = [int(event["event_id"]) for event in events if event.get("event_id") is not None]
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    conn = board_connection(args)
+    try:
+        if KANBAN.learning_archive_hash_exists(conn, f"sha256:{digest}"):
+            return
+        KANBAN.learning_archive_add(
+            conn,
+            min(event_ids) if event_ids else None,
+            max(event_ids) if event_ids else None,
+            len(event_ids),
+            rel_to_project(project_root(args), path),
+            f"sha256:{digest}",
+            "1",
+            preserved_signal,
+            dropped_detail,
+        )
+    finally:
+        conn.close()
 
 
 def cmd_rotate(args: argparse.Namespace) -> None:
     root = ledger_root(args)
     for day in days_to_rotate(args):
-        source = raw_path(root, day)
-        if not source.exists():
-            print(f"skip missing raw/{day.isoformat()}.ndjson")
+        start = int(datetime.combine(day, datetime.min.time(), tzinfo=UTC).timestamp())
+        end = int(datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=UTC).timestamp()) - 1
+        events = load_database_events(args, start, end)
+        if not events:
+            print(f"skip no database events for {day.isoformat()}")
             continue
-        events = iter_jsonl(source)
         target = write_bounded_daily(root, day, events, args.max_bytes)
-        if not args.keep_raw:
-            source.unlink()
+        record_archive(
+            args, target, events,
+            "database event counts and bounded chronological context",
+            "detail omitted only when the compressed artifact exceeded its configured cap",
+        )
         print(rel_to_project(project_root(args), target))
 
 
@@ -415,7 +520,12 @@ def summarize_chain(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return chains
 
 
-def aggregate_doc(root: Path, end_day: date, events: list[dict[str, Any]]) -> dict[str, Any]:
+def aggregate_doc(
+    root: Path,
+    end_day: date,
+    events: list[dict[str, Any]],
+    metrics: list[dict[str, Any]],
+) -> dict[str, Any]:
     start_day = end_day - timedelta(days=6)
     by_type = Counter(str(event.get("event_type", "unknown")) for event in events)
     by_track = Counter(str(event.get("context_track", "unknown")) for event in events)
@@ -460,6 +570,18 @@ def aggregate_doc(root: Path, end_day: date, events: list[dict[str, Any]]) -> di
             }
             for track in sorted(TRACKS)
         },
+        "metric_trends": {
+            name: [
+                {
+                    "measured_at": item["measured_at"],
+                    "value": item["metric_value"],
+                    "unit": item["unit"],
+                    "derivation_version": item["derivation_version"],
+                }
+                for item in metrics if item["metric_name"] == name
+            ]
+            for name in sorted({item["metric_name"] for item in metrics})
+        },
         "loss_accounting": None,
     }
 
@@ -496,13 +618,15 @@ def cmd_aggregate(args: argparse.Namespace) -> None:
     end_day = parse_day(args.end_date) if args.end_date else utc_now().date() - timedelta(days=1)
     start = datetime.combine(end_day - timedelta(days=6), datetime.min.time(), tzinfo=UTC)
     end = datetime.combine(end_day + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
-    events = [
-        event
-        for event in load_events(root)
-        if start <= parse_ts(str(event.get("ts_utc", "1970-01-01T00:00:00Z"))) < end
-    ]
-    doc = aggregate_doc(root, end_day, events)
+    events = load_database_events(args, int(start.timestamp()), int(end.timestamp()) - 1)
+    metrics = load_metric_snapshots(args, int(start.timestamp()), int(end.timestamp()) - 1)
+    doc = aggregate_doc(root, end_day, events, metrics)
     target = write_bounded_aggregate(root, end_day, doc, args.max_bytes)
+    record_archive(
+        args, target, events,
+        "seven-day counts, metric context, source links, and bounded high-signal chains",
+        "overflow chains and summaries when required by the configured cap",
+    )
     prune_aggregates(root, args.keep_aggregates)
     print(rel_to_project(project_root(args), target))
 
@@ -537,8 +661,50 @@ def cmd_prune(args: argparse.Namespace) -> None:
         print(rel_to_project(project_root(args), path))
 
 
+def cmd_import_legacy(args: argparse.Namespace) -> None:
+    project = project_root(args)
+    source = Path(args.source).resolve()
+    try:
+        relative = source.relative_to(project).as_posix()
+    except ValueError:
+        fail("Legacy source must be inside the active project")
+    digest = f"sha256:{hashlib.sha256(source.read_bytes()).hexdigest()}"
+    events = iter_jsonl(source)
+    conn = board_connection(args)
+    try:
+        if KANBAN.learning_archive_hash_exists(conn, digest):
+            print(f"skip already imported {relative}")
+            return
+        records = []
+        for event in events:
+            timestamp = int(parse_ts(str(event.get("ts_utc", iso_z(utc_now())))).timestamp())
+            records.append({
+                "occurred_at": timestamp,
+                "event_type": str(event.get("event_type", "legacy.import")),
+                "context_track": str(event.get("context_track", "execution")),
+                "outcome": event.get("outcome_tag"),
+                "reason_summary": str(event.get("reason_summary") or event.get("text") or "legacy event"),
+                "payload_json": json_dump(event),
+                "intent_id": event.get("intent_id"), "task_id": event.get("task_id"),
+                "run_id": event.get("run_id"), "decision_id": event.get("decision_id"),
+                "gate_id": event.get("gate_id"), "evidence_id": event.get("evidence_id"),
+                "reference_id": event.get("reference_id") or event.get("source_id"),
+                "attempt_id": str(event["attempt_id"]) if event.get("attempt_id") is not None else None,
+                "artifact_ref": event.get("artifact_id") or event.get("artifact_ref"),
+                "commit_ref": event.get("commit_ref"), "reviewer_id": event.get("reviewer_id"),
+            })
+        KANBAN.learning_event_import(conn, records, relative, digest)
+    finally:
+        conn.close()
+    print(f"imported {len(events)} events from {relative}")
+
+
 def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--project", default=".", help="project root; defaults to current directory")
+    parser.add_argument(
+        "--db", default=".kanban/kanban.db",
+        help="project-relative canonical Kanban database; default: .kanban/kanban.db",
+    )
     parser.add_argument(
         "--ledger-dir",
         default=DEFAULT_LEDGER_DIR,
@@ -550,7 +716,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Project-local learning ledger helper")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    append = sub.add_parser("append", help="append one structured event to the raw daily ledger")
+    append = sub.add_parser("append", help="append one structured event to the canonical Kanban database")
     add_common(append)
     append.add_argument("--json", help="event JSON object, @file, or - for stdin")
     append.add_argument("--field", action="append", default=[], help="extra KEY=VALUE field")
@@ -572,7 +738,7 @@ def build_parser() -> argparse.ArgumentParser:
     append.add_argument("--lane-id")
     append.set_defaults(func=cmd_append)
 
-    list_cmd = sub.add_parser("list", help="list/query events by time, track, type, or checkpoint range")
+    list_cmd = sub.add_parser("list", help="query canonical database events by time, track, type, or checkpoint range")
     add_common(list_cmd)
     list_cmd.add_argument("--since", help="inclusive UTC timestamp or YYYY-MM-DD")
     list_cmd.add_argument("--until", help="inclusive UTC timestamp or YYYY-MM-DD")
@@ -583,11 +749,11 @@ def build_parser() -> argparse.ArgumentParser:
     list_cmd.add_argument("--json", action="store_true", help="emit JSONL")
     list_cmd.set_defaults(func=cmd_list)
 
-    rotate = sub.add_parser("rotate", help="compress raw daily ledgers into bounded daily artifacts")
+    rotate = sub.add_parser("rotate", help="export database events into bounded daily artifacts")
     add_common(rotate)
     rotate.add_argument("--date", help="rotate a specific YYYY-MM-DD raw ledger")
     rotate.add_argument("--all", action="store_true", help="rotate all raw ledgers including today")
-    rotate.add_argument("--keep-raw", action="store_true", help="keep source raw files after rotation")
+    rotate.add_argument("--keep-raw", action="store_true", help="deprecated compatibility flag; database events are always retained")
     rotate.add_argument("--max-bytes", type=int, default=MAX_COMPRESSED_BYTES)
     rotate.set_defaults(func=cmd_rotate)
 
@@ -605,6 +771,11 @@ def build_parser() -> argparse.ArgumentParser:
     prune.add_argument("--keep-aggregates", type=int, default=AGGREGATE_KEEP)
     prune.set_defaults(func=cmd_prune)
 
+    migrate = sub.add_parser("import-legacy", help="import a project-local NDJSON or gzip ledger once")
+    add_common(migrate)
+    migrate.add_argument("source")
+    migrate.set_defaults(func=cmd_import_legacy)
+
     return parser
 
 
@@ -613,6 +784,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if Path(args.ledger_dir).is_absolute() or ".." in Path(args.ledger_dir).parts:
         fail("--ledger-dir must be project-relative")
+    try:
+        board_path(args).resolve().relative_to(project_root(args))
+    except ValueError:
+        fail("--db must resolve inside the active project")
     args.func(args)
     return 0
 

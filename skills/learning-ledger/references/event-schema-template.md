@@ -6,7 +6,7 @@
 - `session_id`: conversation/session identifier
 - `turn_id`: monotonic turn index
 - `role`: `user|assistant|worker`
-- `event_type`: `prompt|response|feedback|decision|checkpoint|commit|test`
+- `event_type`: `prompt|response|feedback|decision|checkpoint|commit|test|authorization|gate|evidence|retry|cancellation|side_effect|exception`
 - `text`: redacted body or concise summary
 - `reason_summary`: concise explanation of why this event or delta mattered
 - `context_track`: `execution|reflection`
@@ -17,13 +17,27 @@
 - `checkpoint_range`: optional commit range (`start..end`)
 - `delta_link_id`: optional pointer linking a reflection delta back to its originating execution event or checkpoint
 - `leakage_audit_result`: `not_applicable|pass|needs_review|fail`
-- `storage_scope`: `project-local|cross-project|external|unknown`
-- `storage_location`: project-relative path or project-scoped artifact locator; absolute or external paths are invalid
+- `storage_scope`: canonical events use `project-local`; exported artifacts use
+  a project-relative locator
+- `storage_location`: `.kanban/kanban.db` for canonical state or a
+  project-relative derived-artifact locator; absolute or external paths are invalid
 - `storage_compliance_result`: `pass|needs_review|fail`
 - `outcome_tag`: `accepted|reworked|reverted|blocked|deferred`
 - `lane_id`: optional worker lane id
+- `intent_id`, `task_id`, `run_id`, `attempt_id`, `gate_id`, `artifact_id`,
+  `decision_id`, and `reviewer_id`: optional correlated control-plane ids
+- `policy_result`: optional `allowed|denied|not_applicable`
+- `metric`: optional structured measurements such as first-pass acceptance,
+  rework, override, retry, elapsed time, or cost
 
 ## Aggregation Requirements
+
+- Canonical events use typed foreign keys to intent, task, run, decision, gate,
+  and evidence records where applicable.
+- A Kanban mutation and its learning event commit or roll back atomically.
+- Metric snapshots record scope, window, unit, and derivation version. Prefer
+  calculating metrics from authoritative history; snapshot when historical
+  interpretation or query cost warrants it.
 
 - Ledger and aggregate artifacts must remain project-local.
 - Each record must include `storage_scope`, `storage_location`, and `storage_compliance_result` so local-storage compliance can be validated from the artifact metadata.

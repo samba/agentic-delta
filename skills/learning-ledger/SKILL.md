@@ -1,145 +1,75 @@
 ---
 name: learning-ledger
-description: Use when the user asks to capture execution/feedback/checkpoint history for later reflection and method improvement. Maintains structured, rotated logs and dense-context aggregates for short retention windows.
+description: Use when querying, aggregating, exporting, retaining, or analyzing durable workflow events and Kanban metrics for reflection, trend analysis, audit, or process evaluation. Kanban remains the canonical event-producing workflow.
 ---
 
 # Learning Ledger
 
-## Use This Skill When
+The learning ledger is an analytics and retention view over the canonical
+Kanban database. It does not define task transitions, gates, autonomy, or a
+parallel event source. Normal Kanban operations should record their material
+events atomically; use this skill for explicit observations, queries, metric
+snapshots, aggregation, archival, and legacy import.
 
-Use this skill when the user asks to:
+For enrollment, guidance proposals, existing-codebase review, and bug triage,
+follow the Kanban
+[project-specialist contract](../kanban/references/project-specialists-and-bugs.md).
+This specialty contributes non-distorting measurement/learning guidance;
+reviews missing outcome, quality, flow, and operational feedback; and assesses
+bugs for systemic trend and recurrence significance.
 
-- log prompts/interactions with timestamps,
-- record feedback-loop and checkpoint context (for example commits/tests/decisions),
-- rotate/compress logs,
-- retain short windows and build periodic aggregates for learning.
+## Data Rules
 
-## Integration
+- Link events to available intent, task, run, attempt, gate, decision,
+  criterion, artifact, and exact revision identifiers.
+- Preserve event time, producer, event type, outcome, evidence location, and
+  schema/derivation version. Distinguish observation from inference.
+- Record material transitions, corrections, decisions, rework, validation
+  outcomes, delivery/rollback, human overrides, costs, latency, and final
+  outcomes; avoid low-value narration.
+- Redact secrets, credentials, personal data, proprietary excerpts, and
+  unneeded prompt/tool payloads. Apply project retention policy.
+- Append corrections or superseding events; do not rewrite historical events.
+- Metrics are derived evidence, not performance targets or authority to change
+  policy. Preserve their query window and derivation version.
+- A learning record cannot move work, pass a gate, accept risk, expand
+  permissions, or alter the method that governs it.
 
-This skill is part of an integrated method stack with:
-
-- `kanban`: produces execution-lane, stage, and validation events worth recording.
-- `adaptive-reflection`: consumes ledger artifacts to refine methods and skills.
-
-Expected flow:
-
-1. `kanban` coordinates work and emits meaningful state transitions.
-2. `learning-ledger` records those events and checkpoints in structured form.
-3. `adaptive-reflection` uses the retained and aggregated evidence to improve methods.
-
-## Core Policy Defaults
-
-- Use structured event records (timestamped).
-- Keep ledger artifacts project-local; do not store execution/reflection ledgers outside the active project scope.
-- Record storage metadata on each artifact so project-local compliance can be validated from the schema, not inferred from convention.
-- Tag each event to a context track so raw evidence and derived method lessons stay partitioned.
-- Include feedback and checkpoint linkage (for example commit refs/ranges, validation checkpoints).
-- Include a short reason summary for each material delta so later review can reconstruct why a change happened without replaying the full thread.
-- Retain raw logs for 7 days by default.
-- Rotate ledgers daily and run nightly compression for high-context daily artifacts.
-- Produce 7-day aggregates by default and compress those aggregate artifacts.
-- Keep tiered retention:
-  - raw event logs: short horizon only,
-  - compressed daily and compressed 7-day aggregates: medium horizon,
-  - longitudinal snapshots: long horizon, redacted and trend-focused.
-- Keep both:
-  - high-level summaries, and
-  - dense-context summaries suitable for diagnosis and method learning.
-- Retain up to 4 compressed 7-day aggregate artifacts by default.
-- Enforce a hard size limit of 1MB per compressed daily rotated ledger artifact.
-- Enforce a hard size limit of 1MB per compressed 7-day aggregate artifact.
-- When compaction is required for either daily or 7-day artifacts, record loss-accounting that states what detail was dropped, what signal was preserved, and why the retained summary still satisfies the intended use.
-- Audit cross-track leakage before promoting a derived lesson into a reusable method artifact.
+The packaged [event schema template](references/event-schema-template.md)
+describes explicit observation fields. The SQLite schema and Kanban helper are
+authoritative when they differ from legacy file formats.
 
 ## Workflow
 
-1. Define event schema and redaction rules.
-2. Partition each event into the appropriate context track:
-   - `execution`: concrete task flow, checkpoints, tests, commits.
-   - `reflection`: distilled lessons, hypotheses, and method deltas.
-3. Append structured events during execution and review loops, including a concise reason summary for meaningful redirects, fixes, and learned deltas.
-   For autonomous software-development loops, record stage transitions,
-   applicability decisions (`applied`, `skipped-not-applicable`, `blocked`,
-   `rework`), pre-handoff validation results, rework routes, retry counts,
-   design-validation outcomes, validation debt, and pattern checkpoints as
-   execution events.
-4. When a reflection artifact derives from execution history, record an explicit linkage back to the source delta or checkpoint.
-5. Run a leakage audit before promoting cross-track conclusions:
-   - verify the reflection summary does not pull in unnecessary raw context,
-   - verify the execution record retains the detailed evidence,
-   - mark the audit result in the ledger event.
-6. Rotate daily logs and run nightly compression of prior-day high-context daily ledgers.
-6.5. Validate each compressed daily rotated ledger size is <= 1MB; if not, re-summarize for higher signal density and recompress until within limit.
-6.6. When daily compaction occurs, append loss-accounting describing preserved signal, dropped detail, and compaction rationale.
-7. Enforce retention pruning at 7-day default horizon.
-8. Build 7-day aggregate artifacts with:
-   - high-level outcomes/trends,
-   - context-dense, high-signal chains (feedback -> decision -> checkpoint -> outcome),
-   - explicit linkage back to compressed daily artifacts.
-   - If an aggregate exceeds 1MB, iteratively compact with higher-density summarization until it fits while preserving high-signal context.
-   - When 7-day compaction occurs, append loss-accounting describing preserved signal, dropped detail, and compaction rationale.
-9. Produce periodic longitudinal snapshots that retain only redacted summaries, stable identifiers, and trend deltas for slow-burn analysis.
-10. Extend the raw-retention window only when evidence is still too sparse or confidence is still too low to classify a pattern safely.
-11. Compress each completed 7-day aggregate and retain only the most recent 4 compressed 7-day aggregates.
-11.5. Validate each compressed 7-day aggregate size is <= 1MB before retention; if not, re-summarize and recompress until within limit.
-12. Expose query paths by time window, checkpoint range, and context track.
+1. Identify the question, time window, scope, identifiers, and retention or
+   privacy constraints.
+2. Query the canonical database before legacy archives. Do not double-count an
+   imported event and its archived source.
+3. Add an explicit learning event only when the observation was not already
+   captured by a state-changing Kanban operation.
+4. Create versioned metric snapshots for reproducible trend comparisons.
+5. Aggregate flow and quality together: WIP, throughput, age, cycle time,
+   first-pass acceptance, rework, escaped defects, rollback, human override,
+   cost, and latency where evidence exists.
+6. Report data coverage, missing links, derivation limits, and uncertainty.
+7. Archive or prune only according to configured retention, retaining hashes
+   and archive receipts needed to detect duplicate imports.
 
-## Helper CLI
+## Helper
 
-Use `scripts/ledger.py` from the active project root to maintain project-local
-ledger artifacts under `.learning-ledger/` by default. The helper implements the
-practical core path:
+Use `scripts/ledger.py` for query, aggregate, archive/export, and legacy import.
+Use `kanban/scripts/kanban.py` for canonical event insertion, metric snapshots,
+and state-linked atomic operations. Do not edit SQLite or generated aggregates
+directly.
 
-- `append`: write one structured JSON event to `.learning-ledger/raw/YYYY-MM-DD.ndjson`.
-- `list`: query raw and rotated daily events by time, context track, event type,
-  or checkpoint range.
-- `rotate`: deterministically gzip raw daily ledgers into
-  `.learning-ledger/daily/`, enforcing the 1MB compressed artifact cap. If a
-  daily artifact is too large, the helper writes a compacted daily summary with
-  explicit loss-accounting.
-- `aggregate`: build a compressed 7-day aggregate with count summaries,
-  track-aware summaries, source artifact links, high-signal checkpoint chains,
-  and latest-4 aggregate retention.
-- `prune`: enforce raw, daily, and aggregate retention windows.
+The ledger helper retains compatibility with historical NDJSON and compressed
+aggregate files. Those files are archive/interchange formats, not a second
+live source of truth. Import must be idempotent and must preserve the original
+record or its content hash.
 
-Examples:
+## Output
 
-```sh
-skills/learning-ledger/scripts/ledger.py append \
-  --session-id session-001 \
-  --turn-id 1 \
-  --role assistant \
-  --event-type decision \
-  --context-track execution \
-  --classification-basis "implementation checkpoint" \
-  --reason-summary "Chose project-local JSONL ledger storage" \
-  --text "Added the initial ledger event."
-
-skills/learning-ledger/scripts/ledger.py list --track execution --since 2026-07-01
-skills/learning-ledger/scripts/ledger.py rotate --date 2026-07-14
-skills/learning-ledger/scripts/ledger.py aggregate --end-date 2026-07-14
-skills/learning-ledger/scripts/ledger.py prune --raw-days 7 --daily-days 35 --keep-aggregates 4
-```
-
-The CLI is intentionally local and deterministic. It does not perform semantic
-redaction or model-generated summarization; callers must redact event text
-before append. Its compaction fallback preserves counts, source links, and a
-bounded chronological sample so retention stays predictable.
-
-## Required Deliverables
-
-- Schema definition and usage guidance.
-- Track-partition guidance covering execution vs reflection records.
-- Leakage-audit guidance for promoted method deltas.
-- Rotation/compression/retention policy.
-- Tiered aggregate and longitudinal snapshot policy.
-- Raw-retention extension triggers and bounds.
-- Project-local storage guidance for ledgers and aggregates.
-- Artifact storage metadata and compliance-check guidance.
-- 7-day aggregate template with context-dense, high-signal sections and compression/retention rules (keep latest 4).
-- Aggregate size-bound policy with 1MB hard cap and compaction fallback procedure.
-- Compaction loss-accounting requirement for daily and 7-day artifacts.
-
-## Reference Material
-
-- Event schema template: [references/event-schema-template.md](references/event-schema-template.md)
+Return the query window and scope, source database/archive, coverage and
+missing data, versioned metrics, material event chains, supported trends,
+counterevidence, and limitations. When providing input to adaptive reflection,
+separate raw observations, derived metrics, and interpretation.
