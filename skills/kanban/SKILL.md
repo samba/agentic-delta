@@ -18,6 +18,12 @@ are normative; the
 [semantic rule inventory](references/semantic-rule-inventory.md) resolves
 ownership and legacy terminology.
 
+Autonomous execution is provided by the separate `autonomous-workstream`
+skill. Kanban remains authoritative for intents, tasks, dependencies, WIP,
+eligibility, allocation constraints, evidence, and closure. A supervised run
+consumes those policies and writes execution state back through the helper;
+kanban remains usable for manual planning and coordination.
+
 ## Intent And State
 
 Treat an explicit durable objective—such as “my goal is”, “build”, “achieve”,
@@ -128,6 +134,11 @@ Load only what the current operation needs:
 - [commands](references/commands.md): exact helper syntax;
 - [source register](references/source-register.md): adding, refreshing, or
   superseding a governing source or principle.
+
+For detached, continuously resumable execution, load the
+`autonomous-workstream` skill. It owns the supervisor and worker lifecycle,
+event-driven dispatch, worker affinity and context reuse, leases, checkpoints,
+recovery, and run-level resource controls.
 
 ## Deterministic State Helper
 
