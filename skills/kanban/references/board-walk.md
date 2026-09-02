@@ -122,7 +122,11 @@ For `work status`, `work progress`, or `progress`, include:
 - board grouped by column;
 - active lanes/cards;
 - queued, blocked, or deferred lanes/cards;
-- known workers and assignments when background work exists;
+- known workers and assignments when background work exists, including each
+  worker state, last heartbeat, last meaningful-progress timestamp, latest
+  checkpoint and age, next bounded action, and blocker or waiting condition;
+- distinguish active progress from liveness: an unchanged task allocation or
+  heartbeat alone is not evidence that a lane is progressing;
 - blocking clarification questions near the top;
 - open human decisions near the top, with their linked intent/task, options,
   recommendation/default, impact of delay, and safe work continuing;

@@ -121,6 +121,7 @@ INTENT_STATES = ("captured", "researching", "refining", "planned", "deferred", "
 INTENT_CLOSURES = ("realized", "rejected")
 CANONICAL_REWORK_STAGES = {"Discover", "Design", "Implement", "Verify", "Deliver", "Observe"}
 RUN_STATUSES = ("active", "paused", "cancelled", "complete", "failed")
+RUN_WORKER_STATES = ("working", "waiting", "blocked", "stalled", "complete")
 
 
 def fail(message: str, code: int = 2) -> None:
@@ -202,7 +203,7 @@ def init_db(conn: sqlite3.Connection, schema_path: Path) -> None:
     with write_transaction(conn):
         conn.executescript(schema_path.read_text(encoding="utf-8"))
         cursor = conn.execute(
-            "INSERT INTO meta(key, value) VALUES('schema_version', '14') "
+            "INSERT INTO meta(key, value) VALUES('schema_version', '15') "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
         )
         ensure_default_columns(conn)
@@ -998,6 +999,41 @@ def task_list_dependencies(conn: sqlite3.Connection, task_id: str) -> None:
 def status(conn: sqlite3.Connection, show_all: bool) -> None:
     print("config:")
     list_config(conn)
+    telemetry = list(conn.execute(
+        """
+        SELECT r.id, r.worker, r.attempt, r.status, r.heartbeat_at,
+               c.state,
+               (SELECT MAX(progress_at) FROM run_checkins WHERE run_id = r.id) AS progress_at,
+               c.progress_summary, c.next_action,
+               c.expected_next_at, c.blocker, c.created_at
+        FROM runs r
+        LEFT JOIN run_checkins c ON c.id = (
+            SELECT latest.id FROM run_checkins latest
+            WHERE latest.run_id = r.id ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+        )
+        WHERE r.status = 'active'
+        ORDER BY r.id
+        """
+    ))
+    if telemetry:
+        timestamp = now()
+        print("\nWorker telemetry")
+        for row in telemetry:
+            heartbeat_age = "unknown" if row["heartbeat_at"] is None else str(max(0, timestamp - row["heartbeat_at"])) + "s"
+            progress_age = "unknown" if row["progress_at"] is None else str(max(0, timestamp - row["progress_at"])) + "s"
+            state = row["state"] or "unreported"
+            detail = row["progress_summary"] or "no check-in recorded"
+            print(
+                f"- run={row['id']} worker={row['worker']} attempt={row['attempt']} "
+                f"state={state} heartbeat_age={heartbeat_age} progress_age={progress_age} "
+                f"progress={detail[:160]}"
+            )
+            if row["next_action"]:
+                print(f"  next={row['next_action'][:160]}")
+            if row["expected_next_at"]:
+                print(f"  expected_next_at={row['expected_next_at']}")
+            if row["blocker"]:
+                print(f"  blocker={row['blocker'][:160]}")
     for column in column_names(conn):
         rows = list(
             conn.execute(
@@ -2069,6 +2105,75 @@ def run_checkpoint(conn: sqlite3.Connection, run_id: str, checkpoint: str) -> No
         )
         if cursor.rowcount != 1:
             fail(f"Run is unknown or not active: {run_id}")
+
+
+def run_checkin(
+    conn: sqlite3.Connection,
+    run_id: str,
+    state: str,
+    progress: str,
+    next_action: str | None,
+    expected_next_at: int | None,
+    blocker: str | None,
+    evidence: str | None,
+    idempotency_key: str,
+) -> None:
+    if state not in RUN_WORKER_STATES:
+        fail("Invalid worker state")
+    if not progress.strip():
+        fail("Progress summary is required")
+    if state in {"waiting", "blocked"} and not (blocker or "").strip():
+        fail(f"Worker state {state} requires --blocker")
+    if state == "working" and not (next_action or "").strip():
+        fail("Worker state working requires --next-action")
+    row = conn.execute(
+        "SELECT worker, attempt, status FROM runs WHERE id = ?", (run_id,)
+    ).fetchone()
+    if row is None:
+        fail(f"Unknown run: {run_id}")
+    if row["status"] != "active":
+        fail(f"Run is not active: {run_id}")
+    timestamp = now()
+    progress_at = timestamp if state not in {"waiting", "blocked", "stalled"} else None
+    with write_transaction(conn):
+        cursor = conn.execute(
+            """
+            INSERT INTO run_checkins(
+                run_id, worker, attempt, state, heartbeat_at, progress_at,
+                progress_summary, next_action, expected_next_at, blocker,
+                evidence, idempotency_key, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(run_id, idempotency_key) DO NOTHING
+            """,
+            (
+                run_id, row["worker"] or "unknown", row["attempt"], state,
+                timestamp, progress_at, progress.strip(), next_action,
+                expected_next_at, blocker, evidence, idempotency_key, timestamp,
+            ),
+        )
+        if cursor.rowcount == 0:
+            existing = conn.execute(
+                """
+                SELECT worker, attempt, state, progress_summary, next_action,
+                       expected_next_at, blocker, evidence
+                FROM run_checkins
+                WHERE run_id = ? AND idempotency_key = ?
+                """,
+                (run_id, idempotency_key),
+            ).fetchone()
+            proposed = (
+                row["worker"] or "unknown", row["attempt"], state, progress.strip(),
+                next_action, expected_next_at, blocker, evidence,
+            )
+            if tuple(existing) != proposed:
+                fail("Idempotency key already records a different check-in")
+        else:
+            conn.execute(
+                "UPDATE runs SET heartbeat_at = ?, checkpoint = ?, updated_at = ? WHERE id = ?",
+                (timestamp, progress.strip(), timestamp, run_id),
+            )
+    action = "already recorded" if cursor.rowcount == 0 else "recorded"
+    print(f"{action} check-in {run_id} {state}")
 
 
 def run_cancel(conn: sqlite3.Connection, run_id: str, acknowledge: bool) -> None:
@@ -3757,6 +3862,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_run_checkpoint = run_sub.add_parser("checkpoint")
     p_run_checkpoint.add_argument("run_id")
     p_run_checkpoint.add_argument("checkpoint")
+    p_run_checkin = run_sub.add_parser("checkin")
+    p_run_checkin.add_argument("run_id")
+    p_run_checkin.add_argument("state", choices=RUN_WORKER_STATES)
+    p_run_checkin.add_argument("--progress", required=True)
+    p_run_checkin.add_argument("--next-action")
+    p_run_checkin.add_argument("--expected-next-at", type=int)
+    p_run_checkin.add_argument("--blocker")
+    p_run_checkin.add_argument("--evidence")
+    p_run_checkin.add_argument("--idempotency-key", required=True)
     p_run_cancel = run_sub.add_parser("cancel")
     p_run_cancel.add_argument("run_id")
     p_run_cancel.add_argument("--acknowledge", action="store_true")
@@ -4348,6 +4462,10 @@ def dispatch(args: argparse.Namespace, conn: sqlite3.Connection) -> int:
             envelope_set(conn, args.run_id, args.policy_json, args.granted_by)
         elif args.run_cmd == "checkpoint":
             run_checkpoint(conn, args.run_id, args.checkpoint)
+        elif args.run_cmd == "checkin":
+            run_checkin(conn, args.run_id, args.state, args.progress, args.next_action,
+                        args.expected_next_at, args.blocker, args.evidence,
+                        args.idempotency_key)
         elif args.run_cmd == "cancel":
             run_cancel(conn, args.run_id, args.acknowledge)
         elif args.run_cmd == "status":

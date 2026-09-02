@@ -222,6 +222,27 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE INDEX IF NOT EXISTS runs_task_idx ON runs(task_id);
 CREATE INDEX IF NOT EXISTS runs_intent_idx ON runs(intent_id);
 
+CREATE TABLE IF NOT EXISTS run_checkins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    worker TEXT NOT NULL,
+    attempt INTEGER NOT NULL CHECK (attempt > 0),
+    state TEXT NOT NULL CHECK (state IN ('working', 'waiting', 'blocked', 'stalled', 'complete')),
+    heartbeat_at INTEGER NOT NULL,
+    progress_at INTEGER,
+    progress_summary TEXT NOT NULL,
+    next_action TEXT,
+    expected_next_at INTEGER,
+    blocker TEXT,
+    evidence TEXT,
+    idempotency_key TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (run_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS run_checkins_run_idx ON run_checkins(run_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS run_checkins_state_idx ON run_checkins(state, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS autonomy_envelopes (
     run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),

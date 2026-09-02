@@ -48,6 +48,58 @@ class GoalWorkflowTest(unittest.TestCase):
         self.assertEqual(intent["state"], "captured")
         self.assertIn('"autonomy":"background"', intent["raw_json"])
 
+    def test_run_checkins_preserve_progress_and_are_idempotent(self):
+        self.run_cli("goal", "capture", "goal", "Track worker progress")
+        self.run_cli("run", "start", "run-1", "--intent", "goal", "--worker", "worker-1")
+        self.run_cli(
+            "run", "checkin", "run-1", "working", "--progress", "started",
+            "--next-action", "finish slice", "--expected-next-at", "2000000000",
+            "--idempotency-key", "check-1",
+        )
+        first = self.row(
+            "SELECT heartbeat_at, progress_at FROM run_checkins WHERE run_id='run-1'"
+        )
+        self.run_cli(
+            "run", "checkin", "run-1", "working", "--progress", "started",
+            "--next-action", "finish slice", "--expected-next-at", "2000000000",
+            "--idempotency-key", "check-1",
+        )
+        replay = self.row(
+            "SELECT heartbeat_at, progress_at FROM run_checkins WHERE run_id='run-1'"
+        )
+        self.assertEqual(dict(first), dict(replay))
+        self.assertEqual(self.row("SELECT COUNT(*) AS n FROM run_checkins")["n"], 1)
+
+        self.run_cli(
+            "run", "checkin", "run-1", "waiting", "--progress", "awaiting input",
+            "--blocker", "decision", "--idempotency-key", "check-2",
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.run_cli("status")
+        status = output.getvalue()
+        self.assertIn("state=waiting", status)
+        self.assertNotIn("progress_age=unknown", status)
+        self.assertIn("blocker=decision", status)
+
+    def test_run_checkin_rejects_reused_key_with_different_content(self):
+        self.run_cli("goal", "capture", "goal", "Track worker progress")
+        self.run_cli("run", "start", "run-1", "--intent", "goal", "--worker", "worker-1")
+        self.run_cli(
+            "run", "checkin", "run-1", "working", "--progress", "started",
+            "--next-action", "finish slice", "--idempotency-key", "check-1",
+        )
+        with self.assertRaisesRegex(SystemExit, "2"):
+            KANBAN.main([
+                "--db", str(self.db), "run", "checkin", "run-1", "working",
+                "--progress", "different", "--next-action", "finish slice",
+                "--idempotency-key", "check-1",
+            ])
+        self.assertEqual(
+            self.row("SELECT progress_summary FROM run_checkins")["progress_summary"],
+            "started",
+        )
+
     def test_default_specialist_registry_is_versioned_and_implementation_neutral(self):
         self.run_cli("specialist", "class", "list")
         connection = KANBAN.connect(self.db)
