@@ -37,7 +37,10 @@ exploratory or plan-only. Before substantive autonomous execution:
 3. research and refine before creating premature implementation tasks;
 4. enroll every active specialist class so project principles and actionable
    tenets can guide the earliest work;
-5. link every executable task to at least one intent.
+5. split every executable task into a bounded worker claim that should finish
+   in five minutes or less of active execution; if a task appears likely to
+   exceed that bound, split it before dispatch;
+6. link every executable task to at least one intent.
 
 An intent is `captured`, `researching`, `refining`, `planned`, `deferred`, or
 `closed`; closure is `realized` or `rejected`. A work item is `Backlog`,
@@ -159,6 +162,12 @@ work around a failed constraint by editing SQLite manually. A tool limitation
 is a blocker or a reason to propose a reviewed migration, not permission to
 weaken policy.
 
+A task should not be marked in progress by supervisor intent alone. It becomes
+active only when a worker has actually claimed it, recorded the worker identity
+and start time, and can point to a concrete next bounded action. If the next
+slice cannot reasonably complete within five minutes of active execution, split
+it before a worker claim is recorded.
+
 ## Human Decisions And Status
 
 For a material decision, persist one bounded question with viable options when
@@ -181,7 +190,19 @@ Before moving non-trivial work to `Done` or realizing an intent, require:
 - accepted independent review and resolved rework;
 - authorized delivery/readiness evidence when applicable;
 - explicit residual risk, exceptions, validation debt, and deferred work;
-- recorded outcome and learning events.
+- recorded outcome and learning events;
+- a repository documentation update or design-note update that captures the
+  durable result, remaining operational guidance, and any follow-up work that
+  should survive the task itself.
+
+After a task is done and its outcome has been reflected in repository
+documentation, the default Kanban retention window is five days after closure.
+Archival is an explicit maintenance action, not an automatic supervisor side
+effect. Before archival, preserve an immutable, searchable evidence manifest
+linking the intent, task, decisions, sources, reviews, validation, revisions,
+and learning events; verify that no validation debt, unresolved follow-up,
+blocker, or residual-risk decision remains; and retain the archive reference in
+Kanban. Project policy or human direction may extend the five-day period.
 
 Report partial or blocked outcomes honestly. Do not convert incomplete proof,
 budget exhaustion, or a plausible implementation into success.
