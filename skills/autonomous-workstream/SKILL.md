@@ -10,6 +10,9 @@ tasks, links, dependencies, WIP limits, eligibility, evidence, approvals, and
 closure. This skill keeps eligible work moving through a durable, detached
 supervisor and recoverable worker lanes.
 
+The supervisor enforces persisted kanban policy; it does not define, weaken, or
+reinterpret WIP, eligibility, dependencies, gates, evidence, or closure.
+
 ## Detached Supervisor
 
 `start background work` must register a durable run and launch a supervisor

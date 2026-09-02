@@ -21,8 +21,9 @@ ownership and legacy terminology.
 Autonomous execution is provided by the separate `autonomous-workstream`
 skill. Kanban remains authoritative for intents, tasks, dependencies, WIP,
 eligibility, allocation constraints, evidence, and closure. A supervised run
-consumes those policies and writes execution state back through the helper;
-kanban remains usable for manual planning and coordination.
+consumes and enforces those policies without redefining them, then writes
+execution state back through the helper. Kanban remains usable for manual
+planning and coordination.
 
 ## Intent And State
 
@@ -126,7 +127,8 @@ Load only what the current operation needs:
 - [delegation](references/delegation.md): only for multi-lane or background
   coordination;
 - [autonomous-loop compatibility](references/autonomous-loop.md): legacy stage
-  records or its detailed retry/pattern checkpoints;
+  records or detailed retry/pattern checkpoints; it is compatibility guidance,
+  not a competing supervisor contract;
 - [validation contracts](references/validation-contracts.md): selecting a
   domain-specific validation output;
 - [intents and migration](references/intents-and-migration.md): legacy backlog
