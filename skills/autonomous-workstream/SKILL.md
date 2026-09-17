@@ -1,6 +1,6 @@
 ---
 name: autonomous-workstream
-description: Use when a well-defined kanban objective should continue executing in detached background workers while the foreground conversation remains available for planning, decisions, and status review.
+description: Use when a well-defined kanban objective should continue executing in detached background workers while the foreground conversation remains available for planning, decisions, status review, or recurring status monitoring.
 ---
 
 # Autonomous Workstream Driver
@@ -13,6 +13,40 @@ supervisor and recoverable worker lanes.
 The supervisor enforces persisted kanban policy; it does not define, weaken, or
 reinterpret WIP, eligibility, dependencies, gates, evidence, or closure. It
 also does not mark a task in progress until a worker has claimed it.
+
+For Herdr-hosted execution, read
+[Herdr/Cadence integration](references/herdr-cadence-integration.md) before
+dispatch. It defines dedicated-session preflight, Cadence setup, guarded
+commands, user trigger keywords, and recovery-oriented operating rules.
+For backend responsibility mapping and runtime proof requirements, also read
+[Herdr/Cadence runtime](references/herdr-cadence-runtime.md).
+
+## Minimal Execution Contract
+
+The supervisor keeps eligible Kanban work moving; Kanban remains authoritative
+for sequencing, WIP, eligibility, gates, evidence, rework, and closure. A run
+allocation is not started work: the worker must launch, record a matching claim,
+and emit a heartbeat. Missing launch proof is `DISPATCH_FAILED`; fence and
+reconcile it before replacement dispatch. Worker prose never substitutes for
+durable claims, heartbeats, or evidence.
+
+## Checkpoint-And-Delta Handoffs
+
+Use structured, incremental context transfer rather than forwarding full chat
+transcripts. Send one immutable briefing per worker attempt containing the
+objective, task, role, repository/path scope, success criteria, constraints,
+context-pack reference, and required output schema. Thereafter, persist a
+durable checkpoint before reporting meaningful progress and send only a delta:
+the event or checkpoint ID, changed progress, artifact/evidence references,
+blocker, and one bounded next action.
+
+Treat Kanban as shared durable memory, artifacts as the substantive work
+product, checkpoints as current worker state, and chat as a transport and
+exception channel. On resume or replacement, compose a fresh briefing from
+the immutable contract and latest accepted checkpoint; do not replay the full
+conversation or rely on prior agent memory. Heartbeats remain separate from
+progress checkpoints. Use stable IDs and artifact paths instead of pasted
+source or unchanged context.
 
 ## Detached Supervisor
 
@@ -75,13 +109,28 @@ sensitive context into the next task.
 
 ## Recovery And Blocking
 
+### Reassessment After Agent or Host Termination
+
+Execution sessions are disposable; the durable workstream is the recovery
+record. On every new session, resume, or status request, inspect durable Kanban
+state before dispatching new work. An `Active` task with no responsive worker
+is an orphaned claim, never completion or permission for silent reassignment.
+Load its attempt, checkpoint, evidence, blocker, and next action; inspect the
+project filesystem and version-control state against the recorded baseline;
+classify and record the disposition through the helper; then fence or close the
+old attempt and create a linked successor when work remains. Observable
+artifacts and tests may establish progress; worker prose or heartbeat alone
+cannot. A missing live worker is a recovery condition, not by itself a global
+block.
+
 Persist task allocation, worker attempt, last known status, heartbeat, lease,
 checkpoint, retry history, blocker, dependency, approval, and state-transition
 events in the kanban database through supported helper operations.
 
-On restart, preserve completed tasks, expire stale leases, restore from the
-latest checkpoint, retry only repeatable or idempotent actions, and reassign
-eligible work. A task blocked by approval or dependency pauses its lane when
+On restart, preserve completed tasks, restore from the latest checkpoint, and
+retry only repeatable or idempotent actions. An unclaimed stale lease may be
+expired when policy permits; a stale task claim requires foreground
+reconciliation and must not be silently reassigned. A task blocked by approval or dependency pauses its lane when
 possible; independent lanes continue. Every blocked item retains an owner
 lane, unblock condition, and resume priority.
 
@@ -120,6 +169,16 @@ through the Kanban helper and uses their age to reclaim, retry, or reassign
 work according to the envelope. It must not silently reassign a worker that is
 within its heartbeat and progress windows.
 
+### No-progress watchdog
+
+At claim time record the task allotment and a project-filesystem fingerprint
+excluding Kanban state, VCS internals, caches, logs, sockets, and build output.
+Only a newly observed fingerprint via the helper advances productive progress;
+heartbeats and worker-supplied summaries do not. After three allotments without
+observable change, fence the attempt as `failed: progress_timeout` before
+interrupting it, then surface it for foreground refinement rather than
+automatically retrying unchanged work.
+
 ## Status And Completion
 
 Status exposes run state, supervisor heartbeat, lane state, active, waiting,
@@ -138,6 +197,15 @@ worker claim. When a task is done, the worker should capture the durable result
 in repository documentation or design notes so the corresponding kanban record
 can be retained only for the project retention window and then archived once
 that window expires.
+
+For a monitor request, probe the supervisor and workers on a one-minute default
+cadence, or the user-specified cadence and duration, capped at 24 hours. Each
+cycle reports at most ten lines of delta: starts, completions, new evidence,
+review results, rework, blockers, and next actions. Stop only after durable
+state confirms that every lane is blocked and no progress event is possible.
+
+When token-constrained, preserve the same evidence and recovery rules while
+using checkpoint IDs, artifact paths, and compact deltas instead of transcripts.
 
 ## Tooling Boundary
 

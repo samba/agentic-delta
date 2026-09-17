@@ -25,6 +25,23 @@ consumes and enforces those policies without redefining them, then writes
 execution state back through the helper. Kanban remains usable for manual
 planning and coordination.
 
+## Ownership Boundary
+
+Kanban decides what may run and what proves completion. The autonomous-workstream
+skill decides how to launch and supervise that allowed work. Kanban owns task
+state, sequence, dependencies, WIP, eligibility, gates, evidence, review,
+rework, and closure; autonomous-workstream owns startup, claims, heartbeats,
+timeouts, reconciliation, cancellation, and recovery. Neither uses chat prose
+as durable state.
+
+## Minimal Execution Contract
+
+A task is `Active` only with a matching worker claim and current heartbeat. A
+run allocation is merely a dispatch candidate; missing launch proof is
+`DISPATCH_FAILED` and must be reconciled before replacement. Review-plan items
+may be dispatched while their parent remains in `Review`. If no candidate is
+dispatched, record the exact gate, dependency, WIP, or tooling reason.
+
 ## Intent And State
 
 Treat an explicit durable objective—such as “my goal is”, “build”, “achieve”,
@@ -87,6 +104,19 @@ disclose the degraded durability. Never imply that state was persisted.
   Resume from persisted state, never conversation memory.
 - Record material outcomes and corrections in the canonical learning store.
   Learning may propose but cannot silently change governing controls.
+- Resolve stale worker claims in the foreground; do not silently requeue or
+  reassign uncertain work.
+- Treat liveness and productive progress separately. A helper-observed project
+  artifact or filesystem witness is required to advance progress; fence an
+  attempt after three allotted durations without change and require refinement
+  before retry.
+
+## Execution Timing Policy
+
+Every executable task, review increment, research slice, and control action is
+limited to five minutes of active worker time. Heartbeats do not extend the
+allotment. At three allotments without a new observable project artifact, the
+attempt is failed and returned for foreground refinement.
 
 ## Operating Sequence
 
@@ -125,13 +155,8 @@ Load only what the current operation needs:
 - [project specialists and bugs](references/project-specialists-and-bugs.md):
   the canonical common mechanics for early enrollment, guidance proposals,
   comprehensive existing-codebase review, and specialist-informed bug triage;
-- [agent handoff migration](references/agent-handoff-migration.md): updating
-  agents that emit older handoff vocabulary or unstructured arrays;
 - [delegation](references/delegation.md): only for multi-lane or background
   coordination;
-- [autonomous-loop compatibility](references/autonomous-loop.md): legacy stage
-  records or detailed retry/pattern checkpoints; it is compatibility guidance,
-  not a competing supervisor contract;
 - [validation contracts](references/validation-contracts.md): selecting a
   domain-specific validation output;
 - [intents and migration](references/intents-and-migration.md): legacy backlog
@@ -168,7 +193,34 @@ and start time, and can point to a concrete next bounded action. If the next
 slice cannot reasonably complete within five minutes of active execution, split
 it before a worker claim is recorded.
 
+### Checkpoint-And-Delta Context
+
+The helper is the durable shared memory for agent coordination. Support a
+reconstruction packet containing the immutable objective/task contract, latest
+accepted checkpoint, artifact and evidence references, blocker, and next
+bounded action. Workers and supervisors should exchange only compact deltas
+after the initial briefing: event/checkpoint ID, changed progress, proof,
+blocker, and next action. Do not copy full transcripts or unchanged source
+content between agents. On resume or replacement, use a fresh attempt briefing
+from the reconstruction packet; prior chat history is optional context, never a
+workflow dependency. Heartbeats must remain distinct from evidence-backed
+progress checkpoints.
+
 ## Human Decisions And Status
+
+### Orphaned Work Recovery
+
+Kanban state is the durable recovery ledger; worker and supervisor processes
+are replaceable. A required task in `Active` without a responsive worker needs
+foreground reassessment before new work is pulled. Inspect the recorded
+baseline, checkpoint, evidence, blocker, and next action plus current
+filesystem and version-control state. Record whether the attempt is complete
+but unrecorded, partially resumable, unchanged and needing re-planning,
+externally blocked, or unsafe. Fence or close the old attempt and create a
+linked successor for remaining work; never silently requeue uncertain work.
+Heartbeat or worker prose alone is not progress evidence. A missing live
+worker is a recovery condition, not a global blocker when reassessment can
+continue it.
 
 For a material decision, persist one bounded question with viable options when
 known, a recommendation/default, impact of delay, and safe parallel work. After
