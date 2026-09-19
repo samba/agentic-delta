@@ -1,5 +1,6 @@
 .codex
 .session*
 .kanban/kanban.db
+.kanban/kanban.legacy.db
 __pycache__/
 *.py[cod]

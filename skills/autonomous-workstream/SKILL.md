@@ -1,237 +1,199 @@
 ---
 name: autonomous-workstream
-description: Use when a well-defined kanban objective should continue executing in detached background workers while the foreground conversation remains available for planning, decisions, status review, or recurring status monitoring.
+description: Use when a well-defined Kanban objective should continue executing through detached background workers while the foreground conversation remains available for decisions, status, and monitoring.
 ---
 
-# Autonomous Workstream Driver
+# Autonomous Workstream
 
-This skill consumes the kanban skill. Kanban is authoritative for intents,
-tasks, links, dependencies, WIP limits, eligibility, evidence, approvals, and
-closure. This skill keeps eligible work moving through a durable, detached
-supervisor and recoverable worker lanes.
+This skill supplies the live supervisor and worker runtime for Kanban. It does
+not create a second durable workflow database. The Kanban helper persists
+intents, tasks, task states, dependencies, checks, evidence, events, guidance,
+references, and pull capacity. The supervisor is a long-lived live process,
+not a durable Kanban object. Worker sessions, heartbeats, attempts, and
+checkpoints are ephemeral runtime state; replacement reconstructs work from
+the durable task record and live repository state.
 
-The supervisor enforces persisted kanban policy; it does not define, weaken, or
-reinterpret WIP, eligibility, dependencies, gates, evidence, or closure. It
-also does not mark a task in progress until a worker has claimed it.
+For live progress, lease renewal, timeout, and recovery messaging, read
+`kanban/references/coordination-protocol.md`.
 
-For Herdr-hosted execution, read
-[Herdr/Cadence integration](references/herdr-cadence-integration.md) before
-dispatch. It defines dedicated-session preflight, Cadence setup, guarded
-commands, user trigger keywords, and recovery-oriented operating rules.
-For backend responsibility mapping and runtime proof requirements, also read
-[Herdr/Cadence runtime](references/herdr-cadence-runtime.md).
+When the selected agent platform offers detached jobs or background sessions,
+also read `references/runtime-adapters.md`. Use the platform adapter for
+dispatch and monitoring; retain the same Kanban lease and worker contracts.
 
-## Minimal Execution Contract
+## Role topology
 
-The supervisor keeps eligible Kanban work moving; Kanban remains authoritative
-for sequencing, WIP, eligibility, gates, evidence, rework, and closure. A run
-allocation is not started work: the worker must launch, record a matching claim,
-and emit a heartbeat. Missing launch proof is `DISPATCH_FAILED`; fence and
-reconcile it before replacement dispatch. Worker prose never substitutes for
-durable claims, heartbeats, or evidence.
+Use one long-lived supervisor process or session plus dynamic specialist lanes:
 
-## Checkpoint-And-Delta Handoffs
+- a supervisor monitors task states, review queues, pull leases, WIP, and
+  backpressure, and continuously schedules the next action;
+- Review lane: assurance/control workers perform task-bound review only;
+- Implementation lane: implementation workers perform task implementation only;
+- preparation, research, and validation lanes are created only when pullable
+  work requires them.
 
-Use structured, incremental context transfer rather than forwarding full chat
-transcripts. Send one immutable briefing per worker attempt containing the
-objective, task, role, repository/path scope, success criteria, constraints,
-context-pack reference, and required output schema. Thereafter, persist a
-durable checkpoint before reporting meaningful progress and send only a delta:
-the event or checkpoint ID, changed progress, artifact/evidence references,
-blocker, and one bounded next action.
+An assurance/control worker may perform both functions for the same task and
+may serially review multiple compatible tasks. It must not implement a task it
+reviews. Do not launch one worker per criterion by default.
 
-Treat Kanban as shared durable memory, artifacts as the substantive work
-product, checkpoints as current worker state, and chat as a transport and
-exception channel. On resume or replacement, compose a fresh briefing from
-the immutable contract and latest accepted checkpoint; do not replay the full
-conversation or rely on prior agent memory. Heartbeats remain separate from
-progress checkpoints. Use stable IDs and artifact paths instead of pasted
-source or unchanged context.
+## Model and reasoning allocation
 
-## Detached Supervisor
+The coordinator is a routing and state-management role, not the primary
+problem solver. Run the coordinator thread on the lowest-cost, lowest-token,
+lowest-reasoning model that can reliably inspect Kanban status, rank eligible
+work, issue or renew leases, dispatch workers, and report exceptions. Do not
+use a high-reasoning model for routine queue polling, lease maintenance,
+serialization, or status reporting.
 
-`start background work` must register a durable run and launch a supervisor
-worker independent of the foreground conversation. The foreground turn returns
-after registration and initial dispatch; repeated `continue` prompts are not
-required.
+Select each worker's model and reasoning level from the assigned work, not from
+the overall workstream. Use the least expensive tier that can satisfy the
+task's uncertainty and consequence:
 
-The supervisor remains active until the run is complete, cancelled, globally
-blocked, or stopped by an autonomy or resource boundary. It wakes on worker
-completion, failure, timeout, lease expiry, dependency resolution, approval,
-capacity changes, and scheduled reconciliation.
+- **mechanical:** status inspection, deterministic transformation, bounded
+  validation, evidence collection, and other clearly specified work;
+- **bounded:** ordinary implementation, focused research, or a well-defined
+  specialist check with clear acceptance criteria;
+- **complex:** ambiguous design, cross-component integration, novel diagnosis,
+  multi-source synthesis, or assurance/control work requiring substantial
+  judgment;
+- **high-risk:** security-sensitive, irreversible, safety-critical,
+  externally consequential, or otherwise high-residual-risk work requiring
+  the strongest available reasoning and an appropriately qualified specialist.
 
-The supervisor is itself a first-class worker with a lease, heartbeat,
-checkpoint, authority envelope, resource limits, and restart policy. If it
-dies, a later supervisor reconstructs the run from persisted state and resumes
-or safely reassigns work. Never treat conversation memory or an in-process
-queue as durable execution state.
+Start at the lowest applicable tier. Escalate only when the task exhibits
+material ambiguity, failed validation, repeated rework, contradictory
+evidence, a newly discovered dependency, or risk beyond the current tier.
+Escalation should apply to the smallest affected worker or slice, not to the
+whole workstream. If decomposition can reduce complexity, decompose before
+raising the model tier.
 
-## Allocation And WIP
+The coordinator may temporarily escalate for an exceptional scheduling or
+authority decision, but must return to its low-cost default afterward. Worker
+reuse is preferred when the same model tier, specialist role, task boundary,
+and context remain valid; do not reuse a cheap worker across a task whose
+complexity or authority requirements have materially changed.
 
-Read current kanban state through the helper before every allocation decision.
-Respect kanban WIP limits, dependency readiness, task eligibility, isolated
-write ownership, approval gates, and cancellation. A completed or expired
-worker lease releases capacity so the next eligible task can be pulled. A
-pullable task must be a slice that an assigned worker expects to finish within
-five minutes of active execution; if a task appears larger, split it before
-allocating it.
+Every dispatch should carry a compact model-selection rationale: task
+complexity tier, required reasoning level, specialist role if any, and the
+condition that would justify escalation. Do not silently assign the maximum
+model or reasoning level to every worker.
 
-A task is individually claimed with an idempotency key. Reconciliation must be
-safe to repeat and must not dispatch a task twice after duplicate wake events
-or supervisor restart.
+Prefer a platform-native detached job when it supports the required briefing,
+status, follow-up, cancellation, and artifact handoff operations. Do not
+assume that a detached job is a persistent server, shared workspace, or
+surviving process; use only the lifetime and isolation guarantees documented by
+the adapter.
 
-The same five-minute increment boundary applies to assurance and control work.
-Slice a broad review into bounded increments covering one specialist obligation,
-artifact, risk area, or proof surface at a time. Each review increment records
-its inspected scope, findings, evidence, remaining scope, and next action.
-Heartbeat-only review activity does not extend an increment or count as review
-progress.
+## Queue-draining loop
 
-## Worker Reuse And Context Affinity
+Every supervisor wake performs a queue-drain scheduling pass:
 
-Workers may be ephemeral or persistent specialists. Persistent specialists can
-process compatible tasks serially when the task policy permits context reuse.
-Reuse is an optimization, never an eligibility override.
+1. refresh Kanban status and active pull-capacity leases;
+2. collect work from configured review/validation states before admitting new
+   implementation when those states are the active constraint;
+3. prioritize the smallest unblocker that releases downstream pull capacity;
+4. group compatible assurance/control checks for serial specialist reuse;
+5. pull the next most-ready tasks only when downstream capacity exists;
+6. start only the workers necessary for current pullable work, each with a
+   bounded next action, expected progress checkpoint, and compact authority
+   briefing;
+7. after every completion, rework result, validation result, or capacity release,
+   repeat the pass.
 
-Use explicit durable metadata before semantic similarity: shared intent or
-workstream, specialist capability, repository and path scope, linked
-dependencies, research topics, and produced or consumed artifacts. The task
-record declares required capability, eligible worker class, preferred affinity,
-context-reuse permission, isolation level, serialization requirements, expected
-active duration, and the worker-visible next bounded action.
+Continue until no unblocked pullable work remains, or work is permission-gated,
+manually reserved, externally blocked, or explicitly deferred. Completion of a
+single slice is a scheduling event, not a reason to stop.
 
-The supervisor enforces these constraints and chooses reuse, a sanitized
-handoff, or a fresh worker. It retires or replaces a worker when its lease or
-health is stale, authority changes, context exceeds its bound, isolation is
-required, or repeated failures make reuse unsafe. Persistent workers establish
-a clear task boundary, checkpoint the handoff, and do not carry unbounded or
-sensitive context into the next task.
+## Pull and backpressure
 
-## Recovery And Blocking
+This is the shared pull-flow contract with the Kanban skill.
 
-### Reassessment After Agent or Host Termination
+Optimize for pull rather than push. Downstream lanes issue short-lived
+renewable capacity leases. A lease reserves capacity, not a specific task, and
+expiry releases capacity without changing task state.
 
-Execution sessions are disposable; the durable workstream is the recovery
-record. On every new session, resume, or status request, inspect durable Kanban
-state before dispatching new work. An `Active` task with no responsive worker
-is an orphaned claim, never completion or permission for silent reassignment.
-Load its attempt, checkpoint, evidence, blocker, and next action; inspect the
-project filesystem and version-control state against the recorded baseline;
-classify and record the disposition through the helper; then fence or close the
-old attempt and create a linked successor when work remains. Observable
-artifacts and tests may establish progress; worker prose or heartbeat alone
-cannot. A missing live worker is a recovery condition, not by itself a global
-block.
+WIP limits govern task buffering and parallel task flow, not worker count. A
+full downstream review/validation or implementation state is an interrupt
+signal to clear that state; it is not a task blocker. Scale only when
+necessary to satisfy actual downstream demand, and reuse a compatible live
+worker serially whenever possible.
 
-Persist task allocation, worker attempt, last known status, heartbeat, lease,
-checkpoint, retry history, blocker, dependency, approval, and state-transition
-events in the kanban database through supported helper operations.
+When downstream capacity is full, stop admitting upstream work and prioritize
+completion, validation, rework, or review that releases the capacity. Selection
+order is:
 
-On restart, preserve completed tasks, restore from the latest checkpoint, and
-retry only repeatable or idempotent actions. An unclaimed stale lease may be
-expired when policy permits; a stale task claim requires foreground
-reconciliation and must not be silently reassigned. A task blocked by approval or dependency pauses its lane when
-possible; independent lanes continue. Every blocked item retains an owner
-lane, unblock condition, and resume priority.
+1. downstream eligibility;
+2. critical-path or unblock impact;
+3. oldest eligible work;
+4. task priority;
+5. worker affinity and context reuse.
 
-Do not silently expand authority, bypass a gate, or convert a worker failure
-into success. A human decision is an event that may wake affected work; silence
-never grants approval.
+## Task worker demand
 
-## Worker Check-ins And Progress
+The task’s worker-demand contract defines serial, partitionable, or fan-out
+work, explicit work units, minimum/target/maximum workers, reuse policy,
+isolation, and aggregation. Do not create arbitrary parallel workers merely
+because capacity is available. Additional workers require already-defined
+independent work units.
 
-Every leased worker, including the supervisor, must check in on a regular
-cadence set by the run envelope. A check-in is not evidence of progress: the
-worker must distinguish a liveness heartbeat from a meaningful-progress
-checkpoint. The worker must also record its claim start time, because the
-supervisor uses elapsed claim age to identify stalled work and to cull or
-reassign slices that exceed the five-minute bound.
+Every worker claim must name one bounded next action and an expected checkpoint;
+split or refine work that cannot be expressed that way before dispatch.
 
-Each check-in records the worker and attempt identifiers; state (`working`,
-`waiting`, `blocked`, `stalled`, or `complete`); heartbeat time; last
-meaningful-progress time; incremental progress since the prior checkpoint;
-changed artifacts, research, tests, or other observable evidence; the next
-bounded action; the expected next checkpoint; and any blocker or required
-input.
+## Worker briefing and live progress
 
-The supervisor pings each leased worker on the configured cadence and before
-declaring a lease stale. A missed heartbeat is first marked `unknown` or
-`at-risk` and pinged again before lease reclamation. A worker that responds but
-reports no meaningful progress across the configured checkpoint window is
-`stalled`, not healthy merely because its process is alive. Waiting and blocked
-states must name the dependency, input, or approval and its resume condition.
+Every dispatch briefing includes the task and lease IDs, repository/path scope,
+objective, acceptance and validation criteria, current revision, required
+output, permitted tools, prohibited side effects, approval boundaries, stop
+conditions, model/reasoning tier, bounded next action, and expected checkpoint.
 
-Progress checkpoints are monotonic and idempotent: repeating a ping or
-checkpoint must not create duplicate work or claim progress that cannot be
-linked to an artifact, research result, test, state transition, or other
-observable change. The supervisor persists the latest check-in and checkpoint
-through the Kanban helper and uses their age to reclaim, retry, or reassign
-work according to the envelope. It must not silently reassign a worker that is
-within its heartbeat and progress windows.
+Workers report compact live deltas containing the task ID, lease ID, phase
+(`working`, `waiting`, `blocked`, or `complete`), meaningful change, artifact
+or evidence reference, blocker, and next bounded action. Heartbeats establish
+liveness only. The supervisor keeps these live signals in memory; only
+meaningful milestones, outcomes, and recovery decisions become task events.
 
-### No-progress watchdog
+## Recovery
 
-At claim time record the task allotment and a project-filesystem fingerprint
-excluding Kanban state, VCS internals, caches, logs, sockets, and build output.
-Only a newly observed fingerprint via the helper advances productive progress;
-heartbeats and worker-supplied summaries do not. After three allotments without
-observable change, fence the attempt as `failed: progress_timeout` before
-interrupting it, then surface it for foreground refinement rather than
-automatically retrying unchanged work.
+The supervisor must not depend on persisted run records. If a session dies or
+a lease expires, stop dispatching through that lease, allow its capacity
+reservation to release, and do not silently reassign the task. Inspect the
+task’s current state, owner, dependencies, latest meaningful task events,
+checks, evidence, and current filesystem/version-control state. Decide whether
+to resume, rework, review, or reassign, then record that recovery decision as a
+task event before dispatching again.
 
-## Status And Completion
+Heartbeats and chat are liveness signals, not durable proof. Durable events
+should record meaningful milestones, blockers, next actions, state transitions,
+review outcomes, and evidence references.
 
-Status exposes run state, supervisor heartbeat, lane state, active, waiting,
-blocked, stalled, and complete workers, leases, last task status, latest
-checkpoint and its age, last meaningful-progress time, queue depth, WIP
-pressure, next pull candidate, and the exact reason for any pause. A status
-report must not label a lane as actively progressing from an unchanged task
-allocation or heartbeat alone. A queued task should remain queued until a
-worker claim exists; once claimed, the worker identity and start time become
-the authoritative evidence that the task is in flight.
+## Assurance and control
 
-The run is complete only when all required linked kanban tasks have accepted
-evidence, reviews, and applicable gates, with no unresolved validation debt or
-unaccepted residual risk. Intent realization remains a kanban decision, not a
-worker claim. When a task is done, the worker should capture the durable result
-in repository documentation or design notes so the corresponding kanban record
-can be retained only for the project retention window and then archived once
-that window expires.
+When a task enters a state whose policy requires assurance, the Kanban helper
+asserts that every active specialist role has a required assurance check.
+Review workers consume those checks and any task-specific control checks. A
+worker may satisfy several role checks when qualified, but implementation
+remains isolated from assurance and control.
 
-For a monitor request, probe the supervisor and workers on a one-minute default
-cadence, or the user-specified cadence and duration, capped at 24 hours. Each
-cycle reports at most ten lines of delta: starts, completions, new evidence,
-review results, rework, blockers, and next actions. Stop only after durable
-state confirms that every lane is blocked and no progress event is possible.
+Terminal states require all checks and evidence specified by their state policy
+to qualify before completion.
 
-When token-constrained, preserve the same evidence and recovery rules while
-using checkpoint IDs, artifact paths, and compact deltas instead of transcripts.
+## Foreground contract
 
-## Tooling Boundary
+The foreground conversation remains available for human decisions, authority,
+status, approvals, and exceptions. It should not need to prompt the supervisor
+to clear a full review queue or continue a viable backlog. Report the current
+queue, active lanes, backpressure, next pull, blockers, and why execution
+stopped when no work is pullable.
 
-Use the kanban helper for all database reads and writes. Never run direct SQL
-from an agent or supervisor. If the helper cannot represent allocation,
-leases, checkpoints, worker reuse, recovery, or status, record a tooling
-improvement need and use only a documented degraded mode.
+Use the Kanban command service only as the durable transaction boundary:
+obtain scheduler status, select or claim work, reserve or release pull
+capacity, and record meaningful task events, checks, or evidence. Keep worker
+liveness, lease-renewal intent, worker reuse, and dispatch decisions in the
+supervisor-to-worker communication path. A missing heartbeat is handled by
+letting a lease expire and recovering from durable task state; it does not
+justify a heartbeat table or persisted run record.
 
-The helper/runtime must support durable run, supervisor, lane, worker attempt,
-lease, heartbeat, checkpoint, progress-status, event, claim, release, retry,
-pause, resume, cancel, and reconciliation operations. A persistent execution
-guarantee is not valid until those operations and restart/recovery behavior are
-tested.
-
-## Quality Gate
-
-Every lane must enforce simplicity plus idempotency plus lowest-safe error
-boundary. Keep the supervisor thin: read and reconcile durable state, apply
-kanban policy, dispatch bounded work, record outcomes, and recover capacity.
-Do not duplicate kanban policy or hide specialist judgment in scheduling code.
-
-Validate at minimum that worker completion backfills WIP, regular pings record
-heartbeats, meaningful-progress checkpoints distinguish change from liveness,
-waiting and blocked responses retain unblock conditions, stale leases are
-reclaimed only after the heartbeat/progress grace window, supervisor restart
-resumes work, duplicate wakeups or pings do not duplicate claims, lane-local
-blockers do not halt independent lanes, approval resolution wakes the correct
-lane, cancellation prevents new dispatch, work status reflects the latest
-durable worker state, and all state changes use supported helper APIs.
+Before acting, classify the foreground request as status, planning/refinement,
+or execution. Status is read-only. Planning/refinement may prepare work but
+does not implement it. Execution continues through implementation, review,
+validation, and rework until no pullable work remains or an explicit stopping
+condition applies.

@@ -1,283 +1,180 @@
-# Workflow Commands
+# Kanban Helper Commands
 
-Read this reference first when a user message contains a workflow command.
-Canonical commands define behavior. Deprecated spellings should guide the user
-without suppressing an otherwise clear substantive request.
+The helper owns durable Kanban state. Worker sessions, heartbeats, and run
+history remain in the live autonomous-workstream runtime.
 
-## Deprecated Commands
-
-Deprecated command spellings should produce a concise replacement hint when
-they are unambiguously invoking a workflow command. Do not let a spelling hint
-replace an answer to an ordinary conversational question.
-
-| Deprecated phrase | Replacement |
-| --- | --- |
-| `walk the board` | `walk board` (equivalent conversational alias) |
-| `do kanban loop` | ambiguous: use `walk board` for one maintenance pass or `run workstream <goal>` for autonomous queue-drain |
-| `do kanban flow` | `run workstream <goal>` |
-| `map the viable autonomous work stream` | `map workstream <goal>` |
-| `delegate async` | `start background work <goal>` |
-| `async <verb>` | `start background work <goal>` |
-| `enter delegator mode` | no mode exists; use explicit commands |
-| `exit delegator mode` | no mode exists; use explicit commands |
-| `active <verb>` | foreground work is default; restate the desired action directly |
-
-Warning shape for genuinely ambiguous or retired commands:
-
-```text
-Deprecated workflow command: `<phrase>`.
-
-No work was started.
-
-Use `<replacement>`.
-```
-
-When a deprecated phrase has multiple possible replacements, list the choices
-and ask the user to restate the command. Do not infer intent.
-
-## Canonical Commands
-
-### Goal declaration
-
-- Ordinary language such as `my goal is <goal>`, `achieve <goal>`, or an
-  equivalent explicit durable objective invokes goal capture without requiring
-  a special command. Persist a goal contract, acknowledge its intent id, and
-  default to background coordination unless the user requests planning only,
-  immediate foreground execution, or queue-drain.
-- `declare goal <goal>` is an explicit equivalent. It captures first, then
-  performs triage and dispatch under the standard of excellence.
-- Goal declaration authorizes persistence and coordination inside the stated
-  scope. It does not authorize privileged, destructive, production, financial,
-  publishing, or other externally consequential actions.
-
-### Status
-
-- `work status`: report current board state, active/background lanes, blockers,
-  validation debt, review items, and next pullable work. Do not start new work.
-
-### Task creation
-
-Use `task add` to create an executable work item. It requires at least one
-existing intent link and stores scope, dependencies, exit criteria, validation,
-themes, and optional plan context in the task record. New tasks start in
-`Backlog`; use `--column Ready` only when the required readiness fields are
-complete. Do not use `backlog add` for executable work items.
-
-All board inspection and mutation must use the bundled kanban helper. Direct SQL
-and alternate SQLite clients are prohibited, including for read-only inspection.
-When a required query or mutation is unavailable, raise a tooling-improvement
-request to the user instead of bypassing the helper.
-
-Canonical learning data follows the same rule. Use `event add/list`, `metric
-snapshot/list`, and `archive add`, or the learning-ledger wrapper that calls
-those APIs. Structured events reside in `.kanban/kanban.db`; compressed daily
-and aggregate files are derived exports, not a competing source of truth.
-
-### Board Maintenance
-
-- `walk board`: run one bounded board-maintenance pass, then report. Inspect
-  Review, Active, Ready, Blocked, and Backlog. Do not queue-drain.
-- `review completed work`: review cards waiting for acceptance and their proof.
-  May use reviewer lanes. Do not implement new work.
-- `close completed work`: move independently reviewed, proof-backed cards to
-  Done. Do not implement new work.
-- `refine intents`: split, clarify, research, and improve intents. Do
-  not implement.
-- `prepare next work`: fill/refine the Ready queue through clarification,
-  splitting, research, and readiness validation. Do not implement unless paired
-  with an execution command.
-
-### Planning
-
-- `plan work <goal>`: clarify the goal, inspect context, and produce an
-  implementation and validation plan. Do not execute.
-- `map workstream <goal>`: map viable autonomous sequence, dependencies,
-  parallel lanes, gates, exclusions, stop conditions, and approvals. Do not
-  execute until the user follows with an execution command.
-
-### Background Execution
-
-- `start background work <goal>`: create coordinator/lane records, dispatch
-  background work, report what is queued/running, then return foreground
-  control. The foreground thread must not perform substantive implementation.
-- `run workstream <goal>`: autonomous queue-drain. Keep dispatching pullable
-  work until no work remains except blocked, permission-gated,
-  manual-review-only, or deferred work. The foreground thread is for status,
-  approvals, blockers, and exceptions.
-- `resume background work`: resume paused background work after revalidating
-  assumptions, blockers, and autonomy boundaries.
-
-For all goal and execution commands, read `standard-of-excellence.md` and
-persist material authority decisions with `decision add/resolve`. Use
-clarifications for missing facts; do not disguise a risk-acceptance or product
-choice as a factual clarification.
-
-### Specialist Handoffs
-
-Profile the work and freeze its assurance/control plan before dispatch:
+All commands use:
 
 ```bash
-python3 skills/kanban/scripts/kanban.py review profile set \
-  <task-id> <work-type> <Discover|Design|Implement|Verify|Deliver|Observe> \
-  [--artifact-kind <kind>] [--risk-attribute <attribute>] \
-  --classified-by <identity> --rationale <text>
-python3 skills/kanban/scripts/kanban.py review profile show <task-id>
-python3 skills/kanban/scripts/kanban.py review plan create \
-  <plan-id> <task-id> [--policy <id>] [--policy-version <n>]
-python3 skills/kanban/scripts/kanban.py review plan show <plan-id>
-python3 skills/kanban/scripts/kanban.py review plan list [--task <task-id>]
-python3 skills/kanban/scripts/kanban.py guidance show <plan-id>-guidance
+python3 skills/kanban/scripts/kanban.py --db .kanban/kanban.db <command>
 ```
 
-The plan covers every active class for assurance and control. Policy exceptions
-remain visible; pending items require specialist dispatch.
-
-Translate required tenets and assurance findings into production work before
-pulling the task into Active:
+## Intents
 
 ```bash
-python3 skills/kanban/scripts/kanban.py obligation add \
-  <obligation-id> <plan-id>-guidance <tenet-id> test \
-  "Run the compatibility contract during implementation" Implement \
-  --verification "reproducible contract test" --owner <worker> \
-  --artifact <artifact> --review-plan-item <assurance-item-id>
-python3 skills/kanban/scripts/kanban.py obligation satisfy \
-  <obligation-id> <passing-evidence-id>
+intent add <id> <summary> --type feature|use-case|capability|problem
+intent list
+intent show <id>
+intent status <id> <captured|researching|refining|planned|deferred|closed>
 ```
 
-An assurance handoff may atomically provide the same records through its
-optional `obligations` array. Use `principle list` and `tenet list` to inspect
-the governing registry. Adding a project principle requires an outcome,
-rationale, authority classification, and any supporting reference ids.
+`intent add` accepts an extensible type. A task may link to multiple intents.
+`goal capture` remains a concise capture alias for conversational workflows.
 
-Store a project tenet or a draft experimental variant without rewriting prior
-versions:
+## Tasks
+
+Customize the project state sequence with:
 
 ```bash
-python3 skills/kanban/scripts/kanban.py tenet store \
-  <tenet-id> <theme> <title> <instruction> --effect <outcome> \
-  --verification <proof-method> --principle <principle-id> \
-  [--reference <reference-id>] [--draft]
-python3 skills/kanban/scripts/kanban.py tenet override \
-  <override-id> <tenet-id> <required|advisory|not-applicable|exception> \
-  '<scope-json>' --rationale <text> --authorized-by <identity> \
-  [--decision <id>] [--expires-at <epoch>] [--rollback-condition <text>]
+state list
+state add <id> <name> --position <n> [--previous <state-id>] [--next <state-id>] \
+  [--wip-limit <n>] [--required-fields '<json-array>'] \
+  [--assurance-on-entry] [--worker-entry] [--review-queue] \
+  [--requires-checks] [--requires-evidence] \
+  [--requires-reviewed-references] [--terminal]
 ```
 
-An exception or not-applicable override requires a linked decision. Overlapping
-active overrides that both match a task are rejected as ambiguous.
-
-Run a scoped tenet experiment only with a draft variant:
+States are process steps, not aliases for the default names. Their display
+names may be arbitrary. Policy flags define what happens at that step; the
+predecessor and successor define the linear process sequence. The default
+five-state workflow is only seed configuration.
 
 ```bash
-python3 skills/kanban/scripts/kanban.py experiment add \
-  <experiment-id> <principle-id> <baseline-tenet> <draft-variant-tenet> \
-  <problem> <hypothesis> '<scope-json>' '<exclusions-json>' '<metrics-json>' \
-  --owner <identity> --rollback-condition <text>
-python3 skills/kanban/scripts/kanban.py experiment status <id> running
-python3 skills/kanban/scripts/kanban.py experiment assign \
-  <id> <task-id> <baseline|variant>
+task add <id> <summary> --intent <intent-id> [--intent <intent-id> ...]
+task list [--state <state>] [--type <task-type>]
+task show <id>
+task refine <id> [--acceptance <criterion>] [--validation <criterion>] \
+  [--details '<json-object>'] [--actor <identity>]
+task purge <id> --confirm
+task move <id> <state-id-or-name>
+task claim <id> --actor <worker>
+task assign <id> <owner> [--actor <identity>]
+task event add <task-id> <event-type> <summary> [--actor <identity>] \
+  [--payload '<json-object>'] [--idempotency-key <key>]
+task event list <task-id> [--json]
+task dependency add <task-id> <dependency-id>
+task dependency remove <task-id> <dependency-id>
 ```
 
-Assign before freezing guidance. Terminal experiment states require an
-authorized decision id. Record the active flow constraint with `constraint
-set`; use `quality-signal open` to stop affected Active work and
-`quality-signal resolve` only after causal fields, countermeasure, and recurrence
-test are known.
+`task claim` atomically claims a task whose successor is configured as a
+worker-entry state, validates that successor's requirements, moves the task
+there, and records a claim event. If the task is already in a `review_queue`
+state, it records a review claim without moving the task or changing its
+implementation owner. It does not bind a capacity lease to the task.
 
-### Project specialists and existing work
+`task refine` updates acceptance criteria, validation criteria, or task details
+and records a refinement event. `task assign` changes the implementation owner
+and records an assignment event; it requires a concrete owner.
 
-Project capture enrolls every active specialist. Inspect the registry and start
-a comprehensive existing-codebase review with:
+`task purge` permanently removes the task. Before using it, confirm that the
+task is terminal, required checks and evidence are complete, task events have
+been reviewed, and no follow-up, validation debt, or residual-risk decision
+still depends on it. Its events, checks, evidence, intent/reference links,
+capacity reservations, and dependency edges are cascaded; linked intents,
+research references, and specialist roles remain.
 
 ```bash
-python3 skills/kanban/scripts/kanban.py project specialists <intent-id>
-python3 skills/kanban/scripts/kanban.py codebase-review start \
-  <review-task-id> <intent-id> <scope-or-revision> \
-  [--objective <goal-relative-review-objective>] [--owner <coordinator>]
-python3 skills/kanban/scripts/kanban.py guidance-proposal list \
-  <intent-id> [--status proposed]
-python3 skills/kanban/scripts/kanban.py guidance-proposal resolve \
-  <proposal-id> <accepted|rejected> [--adopted-id <principle-or-tenet-id>] \
-  [--decision <decision-id>]
+pull next [--claim --actor <worker>] [--lease <lease-id>] [--json]
 ```
 
-Store accepted guidance with `principle add` or `tenet store` before resolving
-its proposal. A rejection requires a linked decision. Handoff proposals are
-advisory and never alter effective guidance automatically.
+`pull next --lease` selects and claims work while consuming one lease slot in
+the same transaction. Without a lease, it selects the oldest highest-priority
+task whose next state is a configured worker-entry state, or an existing
+`review_queue` task, and whose dependencies are terminal. With `--claim`,
+selection and claim are one transaction. A review claim keeps the task in its
+review state and preserves implementation ownership.
 
-### Bugs
+Use `--type bug` for defect work. Backlog candidates are ordinary tasks in the
+Backlog state.
 
-Capture a discrepancy before full diagnosis, then obtain every enrolled
-specialist disposition before priority is finalized:
+Worker demand is stored on the task:
 
 ```bash
-python3 skills/kanban/scripts/kanban.py bug register \
-  <bug-id> <intent-id> <summary> --observed <behavior> --expected <behavior> \
-  --reporter <identity> [--reproduction <steps>] [--environment <context>] \
-  [--evidence <reference>]
-python3 skills/kanban/scripts/kanban.py bug assess \
-  <bug-id> <class-id> <applicable|not-applicable> \
-  --rationale <text> --assessed-by <identity> \
-  [--goal-impact <0-100>] [--urgency <0-100>] [--risk-summary <text>]
-python3 skills/kanban/scripts/kanban.py bug prioritize \
-  <bug-id> <rank> --rationale <goal-relative-reason>
-python3 skills/kanban/scripts/kanban.py bug action \
-  <bug-id> <task-id> --owner <worker>
-python3 skills/kanban/scripts/kanban.py bug list [--intent <intent-id>]
-python3 skills/kanban/scripts/kanban.py bug show <bug-id>
+task demand set <task-id> \
+  --parallelism serial|partitionable|fan-out \
+  --min-workers <n> --target-workers <n> --max-workers <n> \
+  --work-units '<json-array>' --reuse-policy <policy> \
+  --isolation <boundary> --aggregation <rule>
 ```
 
-Applicable assessments require impact, urgency, and risk. Actioning preserves
-the bug rank in its linked backlog task; ordinary refinement, readiness,
-assurance, control, and evidence rules then govern the correction.
-
-Add or update a specialist class only when the implementation-neutral defaults
-do not express the required discipline:
+## Review and evidence
 
 ```bash
-python3 skills/kanban/scripts/kanban.py specialist class add \
-  <class-id> <title> <role-context> [--description <text>]
-python3 skills/kanban/scripts/kanban.py specialist class update \
-  <class-id> <title> <role-context> [--description <text>]
-python3 skills/kanban/scripts/kanban.py specialist class list [--all]
-python3 skills/kanban/scripts/kanban.py specialist class show \
-  <class-id> [--version <n>] [--context-only]
-python3 skills/kanban/scripts/kanban.py specialist gate require \
-  <gate-id> <class-id> <inform|produce|review> --rationale <text>
-python3 skills/kanban/scripts/kanban.py specialist gate list <gate-id>
+review check add <check-id> <task-id> assurance|control <criterion> \
+  [--role <specialist-role-id>] [--optional]
+review check record <check-id> <task-id> passed|failed|not_applicable \
+  --reviewer-role <specialist-role-id> --reviewer-worker-id <worker> \
+  [--finding <text>] [--rationale <text>]
+review check list <task-id>
+
+evidence add <evidence-id> <task-id> <artifact> \
+  --result <result> --producer <identity> [--check-id <check-id>] \
+  [--revision <revision>] [--probe <probe>] [--location <location>]
+evidence list <task-id> [--json]
 ```
 
-Use the stored role context as the delegated worker's opening specialist
-instruction. Do not put skill names in the class or dispatch contract.
+When a task enters a state whose policy requires assurance, every active
+specialist role is enlisted in a required assurance check. The database
+enforces state policy, reviewer independence, and terminal check/evidence
+requirements.
+
+## Specialists and guidance
 
 ```bash
-python3 skills/kanban/scripts/kanban.py handoff validate <document.json> \
-  [--expected-task <task-id>] [--expected-run <run-id>]
-python3 skills/kanban/scripts/kanban.py handoff ingest <document.json> \
-  [--expected-task <task-id>] [--expected-run <run-id>]
-python3 skills/kanban/scripts/kanban.py handoff show <handoff-id>
-python3 skills/kanban/scripts/kanban.py handoff list [--task <task-id>]
+specialist add <id> <name> <purpose> <description>
+specialist list
+
+guidance add <id> <statement> --version <n> [--type principle|tenet]
+guidance reference <guidance-id> <reference-id> --version <n>
 ```
 
-`validate` does not accept the handoff or update workflow records; it proves
-shape plus current workflow semantics against the selected database.
-`ingest` atomically persists normalized records and returns the durable receipt.
-Do not treat schema validation alone as acceptance.
+Guidance is versioned in one table. It may cite research references.
 
-### Background Control
+## Research references
 
-- `pause background work`: stop dispatching new lanes and preserve state.
-- `stop background work`: stop autonomous execution and close or interrupt
-  workers where safe. Preserve enough state to resume manually later.
+```bash
+reference add <id> <url> [--title <title>] [--publisher <publisher>]
+reference link <reference-id> --intent-id <intent-id>
+reference link <reference-id> --task-id <task-id>
+reference review <reference-id> reviewed|rejected|unreviewed
+```
 
-## Precedence
+Design work should gather and review sources before finalizing task scope or
+guidance.
 
-1. Deprecated command gate.
-2. Exact canonical command.
-3. Explicit user instructions in the same message.
-4. General kanban routing by intent.
+## Pull capacity
 
-Exact commands override ordinary assistant autonomy. For example, `start
-background work` forbids active-thread implementation after dispatch even when
-the work is small.
+```bash
+pull next [--claim --actor <identity>] [--lease <lease-id>] [--json]
+task claim <task-id> --actor <identity>
+
+pull lease issue <lease-id> --stage <stage> --lane <lane> --slots <n> \
+  --eligibility '<json-object>' --required-output <contract> \
+  --owner <identity> --ttl-seconds <n> --idempotency-key <key>
+pull lease renew <lease-id> --ttl-seconds <n>
+pull lease release <lease-id>
+pull lease reserve <lease-id> <task-id> [--slots <n>]
+pull lease release-reservation <lease-id> <task-id>
+```
+
+`pull next --lease` selects and claims work while consuming one lease slot in
+the same transaction. Without a lease, `pull next` selects dependency-free
+work by eligibility, explicit task priority, age, and stable ID order. Review
+workers must assemble a fresh task-scoped brief from current state, checks,
+evidence, revision, and events; an implementation plan is context only, never
+acceptance proof.
+Claiming is compare-and-set inside a transaction. Leases reserve capacity
+rather than worker runs; reservations consume slots atomically. Expiry
+releases capacity without moving work to Blocked. A supervisor may derive a
+critical-path priority and write it to the task before pulling; the helper does
+not calculate graph centrality itself.
+
+## Status and validation
+
+```bash
+status
+status --json
+validate
+```
+
+`status --json` is the preferred input for a supervisor scheduling pass.

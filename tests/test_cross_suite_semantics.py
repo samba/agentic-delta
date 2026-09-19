@@ -10,19 +10,9 @@ SRE = DELTA.parent / "agentic-sre"
 
 class CrossSuiteSemanticsTest(unittest.TestCase):
     def test_delta_owns_the_only_handoff_schema(self):
-        delta = json.loads(
-            (DELTA / "skills/kanban/references/specialist-handoff.schema.json").read_text()
-        )
-        self.assertEqual(delta["properties"]["contract_version"]["const"], "2")
-        self.assertIn("handoff_id", delta["required"])
-        self.assertIn("specialist_class", delta["required"])
-        self.assertIn("engagement_role", delta["required"])
-        self.assertIn("worker_id", delta["required"])
-        self.assertIn("gate_id", delta["required"])
-        self.assertIn("applicability", delta["required"])
+        self.assertFalse((DELTA / "skills/kanban/references/specialist-handoff.schema.json").exists())
+        self.assertTrue((DELTA / "skills/kanban/references/coordination-protocol.md").exists())
         self.assertFalse((SRE / "docs/specialist-handoff.schema.json").exists())
-        for path in SRE.glob("skills/*/references/coordinated-handoff.md"):
-            self.assertIn(delta["$id"], path.read_text(), path)
 
     def test_sre_skills_are_independently_packaged(self):
         link_pattern = re.compile(r"\[[^]]*\]\(([^)]+)\)")
@@ -81,51 +71,74 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
 
     def test_every_conditional_kanban_reference_exists(self):
         expected = (
-            "standard-of-excellence.md",
-            "execution-contracts.md",
-            "semantic-rule-inventory.md",
-            "board-walk.md",
-            "backlog-refinement.md",
-            "delegation.md",
-            "autonomous-loop.md",
-            "validation-contracts.md",
-            "intents-and-migration.md",
             "commands.md",
+            "coordination-protocol.md",
+            "pull-flow.md",
             "source-register.md",
-            "specialist-handoff.schema.json",
-            "specialist-coordination.md",
-            "agent-handoff-migration.md",
         )
         root = DELTA / "skills/kanban/references"
         for name in expected:
             self.assertTrue((root / name).is_file(), name)
 
     def test_normative_invariants_remain_enforced_or_owned(self):
-        standard = (DELTA / "skills/kanban/references/standard-of-excellence.md").read_text()
-        contracts = (DELTA / "skills/kanban/references/execution-contracts.md").read_text()
+        guidance = (DELTA / "skills/kanban/SKILL.md").read_text()
+        coordination = (DELTA / "skills/kanban/references/coordination-protocol.md").read_text()
         schema = (DELTA / "skills/kanban/scripts/schema.sql").read_text()
-        self.assertIn("Durable intent before substantive execution", standard)
-        self.assertIn("Controlled autonomy", standard)
-        self.assertIn("Research and provenance", standard)
-        self.assertIn("Verification and acceptance", standard)
-        self.assertIn("Safe delivery and operations", standard)
-        self.assertIn("Learning without self-authorized drift", standard)
-        self.assertIn("immutable envelope", contracts)
-        self.assertIn("exact revision or digest", contracts)
-        self.assertIn("earliest stage", contracts)
+        self.assertIn("Capture the intent", guidance)
+        self.assertIn("Research the intent", guidance)
+        self.assertIn("terminal state", guidance)
+        self.assertIn("Recovery", coordination)
+        self.assertIn("Lease renewal", coordination)
         for table in (
-            "intents", "decisions", "runs", "autonomy_envelopes", "gate_types", "gates",
-            "evidence", "specialist_classes", "specialist_class_versions",
-            "gate_specialist_requirements",
-            "work_types", "task_work_profiles", "review_policies",
-            "review_policy_rules", "review_policy_rule_references",
-            "review_plans", "review_plan_rule_bindings", "review_plan_items",
-            "specialist_handoffs", "handoff_sources",
-            "handoff_artifacts", "handoff_findings", "handoff_evidence",
-            "handoff_risks", "handoff_decisions", "handoff_receipts",
-            "learning_events",
+            "meta", "task_states", "tasks", "task_intents", "task_dependencies",
+            "task_events", "intents", "research_references", "reference_intents",
+            "reference_tasks", "specialist_roles", "task_checks", "evidence",
+            "guidance", "guidance_references", "pull_capacity_leases",
         ):
             self.assertIn(f"CREATE TABLE IF NOT EXISTS {table}", schema)
+        for table in (
+            "backlog_ideas", "bugs", "runs", "run_checkins", "learning_events",
+            "principles", "tenets", "review_plans", "specialist_handoffs",
+            "task_worker_demands", "gates",
+        ):
+            self.assertNotIn(f"CREATE TABLE IF NOT EXISTS {table}", schema)
+
+    def test_background_work_drains_review_lanes_and_queue(self):
+        kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
+        pull_flow = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        for text in (kanban, workstream):
+            self.assertIn("pullable", text)
+            self.assertIn("serial", text)
+        self.assertIn("backpressure", pull_flow.lower())
+        self.assertIn("parallel", kanban)
+        self.assertIn("parallel", workstream)
+        self.assertIn("Re-evaluate the queues after every completion", kanban)
+        self.assertIn("capacity release", kanban)
+        self.assertIn("Every supervisor wake performs a queue-drain scheduling pass", workstream)
+        self.assertIn("Do not launch one worker per criterion by default", workstream)
+        self.assertIn("until no unblocked pullable work remains", workstream)
+
+    def test_autonomous_role_topology_keeps_control_and_production_distinct(self):
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        self.assertIn("Use one long-lived supervisor", workstream)
+        self.assertIn("Review lane", workstream)
+        self.assertIn("Implementation lane", workstream)
+        self.assertIn("must not implement a task it", workstream)
+        self.assertIn("Do not launch one worker per criterion by default", workstream)
+
+    def test_pull_flow_contract_is_linked_and_preserves_task_status(self):
+        pull = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
+        kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        self.assertIn("short-lived and renewable", pull)
+        self.assertRegex(pull, r"reserves\s+capacity, not a specific task")
+        self.assertRegex(pull, r"without moving the task to\s+`Blocked`")
+        self.assertIn("worker-demand contract", pull)
+        self.assertIn("backpressure", pull.lower())
+        self.assertIn("pull-flow.md", kanban)
+        self.assertIn("pull-flow contract", workstream)
+        self.assertIn("preparation, research, and validation lanes", workstream)
 
 
 if __name__ == "__main__":

@@ -318,33 +318,10 @@ def build_event(args: argparse.Namespace) -> dict[str, Any]:
 
 def cmd_append(args: argparse.Namespace) -> None:
     event = build_event(args)
-    occurred_at = int(parse_ts(str(event["ts_utc"])).timestamp())
-    payload = dict(event)
-    conn = board_connection(args)
-    try:
-        KANBAN.learning_event_add(
-            conn,
-            str(event["event_type"]),
-            str(event["reason_summary"]),
-            str(event["context_track"]),
-            event.get("outcome_tag"),
-            json_dump(payload),
-            str(event.get("redaction_state", "redacted")),
-            event.get("intent_id"),
-            event.get("task_id"),
-            event.get("run_id"),
-            event.get("decision_id"),
-            event.get("gate_id"),
-            event.get("evidence_id"),
-            event.get("reference_id") or event.get("source_id"),
-            str(event["attempt_id"]) if event.get("attempt_id") is not None else None,
-            event.get("artifact_id") or event.get("artifact_ref"),
-            event.get("commit_ref") or event.get("checkpoint_ref") if event.get("checkpoint_type") == "commit" else None,
-            event.get("reviewer_id"),
-            occurred_at,
-        )
-    finally:
-        conn.close()
+    target = raw_path(ledger_root(args), parse_ts(str(event["ts_utc"])).date())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as handle:
+        handle.write(json_dump(event) + "\n")
 
 
 def candidate_event_files(root: Path) -> list[Path]:
@@ -365,42 +342,18 @@ def load_file_events(root: Path) -> list[dict[str, Any]]:
 def load_database_events(
     args: argparse.Namespace, since: int | None = None, until: int | None = None
 ) -> list[dict[str, Any]]:
-    conn = board_connection(args)
-    try:
-        rows = KANBAN.query_learning_events(
-            conn, None, None, None, None, since, until, None
-        )
-    finally:
-        conn.close()
-    events: list[dict[str, Any]] = []
-    for row in rows:
-        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
-        event = dict(payload)
-        event.update({
-            "event_id": row["id"],
-            "ts_utc": iso_z(datetime.fromtimestamp(row["occurred_at"], UTC)),
-            "event_type": row["event_type"],
-            "context_track": row["context_track"],
-            "reason_summary": row["reason_summary"],
-            "outcome_tag": row.get("outcome"),
-        })
-        for key in ("intent_id", "task_id", "run_id", "decision_id", "gate_id",
-                    "evidence_id", "reference_id", "attempt_id", "artifact_ref",
-                    "commit_ref", "reviewer_id"):
-            if row.get(key) is not None:
-                event[key] = row[key]
-        events.append(event)
-    return events
+    events = load_file_events(ledger_root(args))
+    return [
+        event for event in events
+        if (since is None or int(parse_ts(str(event["ts_utc"])).timestamp()) >= since)
+        and (until is None or int(parse_ts(str(event["ts_utc"])).timestamp()) <= until)
+    ]
 
 
 def load_metric_snapshots(
     args: argparse.Namespace, since: int | None = None, until: int | None = None
 ) -> list[dict[str, Any]]:
-    conn = board_connection(args)
-    try:
-        return KANBAN.query_metric_snapshots(conn, since=since, until=until)
-    finally:
-        conn.close()
+    return []
 
 
 def matches_query(event: dict[str, Any], args: argparse.Namespace) -> bool:
@@ -456,25 +409,20 @@ def record_archive(
     preserved_signal: str,
     dropped_detail: str,
 ) -> None:
-    event_ids = [int(event["event_id"]) for event in events if event.get("event_id") is not None]
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    conn = board_connection(args)
-    try:
-        if KANBAN.learning_archive_hash_exists(conn, f"sha256:{digest}"):
-            return
-        KANBAN.learning_archive_add(
-            conn,
-            min(event_ids) if event_ids else None,
-            max(event_ids) if event_ids else None,
-            len(event_ids),
-            rel_to_project(project_root(args), path),
-            f"sha256:{digest}",
-            "1",
-            preserved_signal,
-            dropped_detail,
-        )
-    finally:
-        conn.close()
+    manifest = ledger_root(args) / "archives.jsonl"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    existing = manifest.read_text(encoding="utf-8") if manifest.exists() else ""
+    if f'"content_hash":"sha256:{digest}"' in existing:
+        return
+    with manifest.open("a", encoding="utf-8") as handle:
+        handle.write(json_dump({
+            "artifact": rel_to_project(project_root(args), path),
+            "content_hash": f"sha256:{digest}",
+            "event_count": len(events),
+            "preserved_signal": preserved_signal,
+            "dropped_detail": dropped_detail,
+        }) + "\n")
 
 
 def cmd_rotate(args: argparse.Namespace) -> None:
@@ -669,34 +617,25 @@ def cmd_import_legacy(args: argparse.Namespace) -> None:
     except ValueError:
         fail("Legacy source must be inside the active project")
     digest = f"sha256:{hashlib.sha256(source.read_bytes()).hexdigest()}"
+    marker = ledger_root(args) / "imports" / f"{digest.removeprefix('sha256:')}.json"
+    if marker.exists():
+        print(f"skip already imported {relative}")
+        return
     events = iter_jsonl(source)
-    conn = board_connection(args)
-    try:
-        if KANBAN.learning_archive_hash_exists(conn, digest):
-            print(f"skip already imported {relative}")
-            return
-        records = []
+    target = raw_path(ledger_root(args), utc_now().date())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    count = 0
+    with target.open("a", encoding="utf-8") as handle:
         for event in events:
-            timestamp = int(parse_ts(str(event.get("ts_utc", iso_z(utc_now())))).timestamp())
-            records.append({
-                "occurred_at": timestamp,
-                "event_type": str(event.get("event_type", "legacy.import")),
-                "context_track": str(event.get("context_track", "execution")),
-                "outcome": event.get("outcome_tag"),
-                "reason_summary": str(event.get("reason_summary") or event.get("text") or "legacy event"),
-                "payload_json": json_dump(event),
-                "intent_id": event.get("intent_id"), "task_id": event.get("task_id"),
-                "run_id": event.get("run_id"), "decision_id": event.get("decision_id"),
-                "gate_id": event.get("gate_id"), "evidence_id": event.get("evidence_id"),
-                "reference_id": event.get("reference_id") or event.get("source_id"),
-                "attempt_id": str(event["attempt_id"]) if event.get("attempt_id") is not None else None,
-                "artifact_ref": event.get("artifact_id") or event.get("artifact_ref"),
-                "commit_ref": event.get("commit_ref"), "reviewer_id": event.get("reviewer_id"),
-            })
-        KANBAN.learning_event_import(conn, records, relative, digest)
-    finally:
-        conn.close()
-    print(f"imported {len(events)} events from {relative}")
+            event.setdefault("event_type", "legacy.import")
+            event.setdefault("context_track", "execution")
+            event.setdefault("reason_summary", event.get("text") or "legacy event")
+            event.setdefault("ts_utc", iso_z(utc_now()))
+            handle.write(json_dump(event) + "\n")
+            count += 1
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json_dump({"source": relative, "content_hash": digest, "event_count": count}) + "\n", encoding="utf-8")
+    print(f"imported {count} events from {relative}")
 
 
 def add_common(parser: argparse.ArgumentParser) -> None:

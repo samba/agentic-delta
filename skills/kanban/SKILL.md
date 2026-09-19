@@ -1,260 +1,141 @@
 ---
 name: kanban
-description: Use when capturing durable goals, planning or prioritizing work, maintaining project state, reporting status, refining a backlog, or coordinating bounded autonomous software work through research, decisions, gates, evidence, review, delivery, and learning.
+description: Use when capturing intents, refining and prioritizing tasks, maintaining project state, coordinating pull-based work, or recording assurance, control, research, guidance, and evidence.
 ---
 
 # Kanban Coordinator
 
-This is the canonical coordinator for durable objectives and work-item state.
-It persists intent, selects the least-complex adequate workflow, issues bounded
-work, accepts specialist evidence, enforces gates, routes rework, and reports
-outcomes. It does not replace domain specialists or human authority.
+Kanban is the durable work-state kernel for the project. It records intents,
+tasks, customizable task states, dependencies, research inputs, assurance and
+control checks, evidence, guidance, task events, and short-lived pull capacity.
+It does not persist worker runs or attempt histories.
 
-For every durable objective, read the
-[standard of excellence](references/standard-of-excellence.md). For autonomous
-runs, gates, specialist results, rework, or closure, also read the
-[execution contracts](references/execution-contracts.md). These two references
-are normative; the
-[semantic rule inventory](references/semantic-rule-inventory.md) resolves
-ownership and legacy terminology.
+Use `scripts/kanban.py` for all Kanban state changes. Do not edit the SQLite
+database directly. The autonomous-workstream skill owns live worker sessions,
+worker reuse, scheduling, queue draining, and recovery decisions.
 
-Autonomous execution is provided by the separate `autonomous-workstream`
-skill. Kanban remains authoritative for intents, tasks, dependencies, WIP,
-eligibility, allocation constraints, evidence, and closure. A supervised run
-consumes and enforces those policies without redefining them, then writes
-execution state back through the helper. Kanban remains usable for manual
-planning and coordination.
+## Durable model
 
-## Ownership Boundary
+An intent is an objective or problem, classified by an extensible type such as
+`feature`, `use-case`, `capability`, or `problem`. A task is actionable work;
+bugs are tasks with `task_type=bug`. Tasks may serve multiple intents through
+`task_intents`.
 
-Kanban decides what may run and what proves completion. The autonomous-workstream
-skill decides how to launch and supervise that allowed work. Kanban owns task
-state, sequence, dependencies, WIP, eligibility, gates, evidence, review,
-rework, and closure; autonomous-workstream owns startup, claims, heartbeats,
-timeouts, reconciliation, cancellation, and recovery. Neither uses chat prose
-as durable state.
+Every task has a foreign-key `state_id` into the project’s `task_states` table.
+The default linear states are:
 
-## Minimal Execution Contract
+```text
+Backlog → Ready → Active → Review → Done
+```
 
-A task is `Active` only with a matching worker claim and current heartbeat. A
-run allocation is merely a dispatch candidate; missing launch proof is
-`DISPATCH_FAILED` and must be reconciled before replacement. Review-plan items
-may be dispatched while their parent remains in `Review`. If no candidate is
-dispatched, record the exact gate, dependency, WIP, or tooling reason.
+Projects may add or customize states. Each state records predecessor and
+successor metadata, WIP, entry/completion policy, and readiness requirements.
+State names are descriptive only: custom states are new process steps, not
+aliases for Backlog, Ready, Active, Review, or Done. Backlog is a state, not a
+second work-item artifact.
 
-## Intent And State
+The database persists meaningful task events, not worker heartbeats. A future
+session resumes from the task state, latest task events, dependencies, checks,
+evidence, and current pull capacity. The supervisor is a long-lived live
+process, not a durable database object; it may be replaced at any time.
 
-Treat an explicit durable objective—such as “my goal is”, “build”, “achieve”,
-or “run this workstream”—as a persistence request unless the user marks it
-exploratory or plan-only. Before substantive autonomous execution:
+## Pull and flow rules
 
-1. capture the objective, known success criteria, constraints, non-goals,
-   autonomy mode, approval boundaries, and stop conditions;
-2. acknowledge the intent id;
-3. research and refine before creating premature implementation tasks;
-4. enroll every active specialist class so project principles and actionable
-   tenets can guide the earliest work;
-5. split every executable task into a bounded worker claim that should finish
-   in five minutes or less of active execution; if a task appears likely to
-   exceed that bound, split it before dispatch;
-6. link every executable task to at least one intent.
+The coordinator optimizes for pull: downstream capacity requests the next most
+ready work. WIP limits constrain task buffering and do not prescribe agent
+counts. Serial and parallel task demand remain separate from agent count.
+Review WIP is additional to implementation WIP. A full state is an
+interrupt signal for the supervisor; it is not a task blocker and must not
+create a fake blocked status.
 
-An intent is `captured`, `researching`, `refining`, `planned`, `deferred`, or
-`closed`; closure is `realized` or `rejected`. A work item is `Backlog`,
-`Ready`, `Active`, `Blocked`, `Review`, `Done`, or `Deferred`. `Done` applies to
-accepted work; an intent is realized only when all required linked work and
-outcome criteria are satisfied.
+Pull-capacity leases reserve short-lived downstream capacity, not specific
+tasks. They may expire or be released without changing task state. Backpressure
+must slow upstream admission before new work is started when downstream review
+or validation capacity is full.
 
-If persistence is unavailable, maintain an explicit in-session contract and
-disclose the degraded durability. Never imply that state was persisted.
+Worker demand is a property of a task. Serial work uses one reusable worker;
+partitionable or fan-out work may use more workers only when independent work
+units are already defined. Assurance/control workers must not implement the
+same task. Every assignment must have one bounded next action and an expected
+progress checkpoint; a worker must not receive an unbounded workstream as one
+claim.
 
-## Coordinator Invariants
+## Assurance and control
 
-- Preserve `goal -> research/decision -> design -> task -> validation criterion
-  -> exact evidence` traceability.
-- Research begins locally, then uses current authoritative sources. Before a
-  custom mechanism, assess platform primitives, maintained open source,
-  templates, and standards; retain candidates, rejected alternatives, and the
-  verified capability gap.
-- Persist material human decisions. Ask only after safe inspection and research
-  cannot resolve them; never infer approval for privileged, destructive,
-  externally consequential, goal-changing, or high-residual-risk actions.
-- Before dispatch, record an immutable autonomy envelope covering paths, tools,
-  network, credentials, side effects, time/cost, concurrency, retry, approval,
-  cancellation, and stop conditions. A worker cannot expand it.
-- Enforce WIP and dependency readiness. Use isolated write ownership for
-  concurrent work and avoid delegation when a deterministic operation or
-  single bounded lane is sufficient.
-- A request to review an existing codebase invokes every enrolled specialist
-  against the project goal. Register a discovered bug immediately, obtain every
-  enrolled specialist disposition, and prioritize it with remaining goal work
-  before creating its governed corrective task.
-- Select expected gates from risk and scope. Each evaluator owns its
-  applicability and recommendation; the coordinator may not fabricate a pass
-  or `not-applicable` result.
-- Bind evidence to criteria and exact artifact revisions. Agent confidence,
-  self-report, or passing tests alone cannot close non-trivial work.
-- Require a fresh independent review for non-trivial work and route defects to
-  the earliest stage able to repair them. Bound retries and checkpoint repeated
-  failure patterns rather than repeating unchanged attempts.
-- Keep validation debt, residual risk, exceptions, deferred work, and scope
-  drift explicit. They block closure unless accepted by authorized policy or a
-  recorded human decision.
-- Record cancellation acknowledgement and external side-effect receipts.
-  Resume from persisted state, never conversation memory.
-- Record material outcomes and corrections in the canonical learning store.
-  Learning may propose but cannot silently change governing controls.
-- Resolve stale worker claims in the foreground; do not silently requeue or
-  reassign uncertain work.
-- Treat liveness and productive progress separately. A helper-observed project
-  artifact or filesystem witness is required to advance progress; fence an
-  attempt after three allotted durations without change and require refinement
-  before retry.
+`specialist_roles` is the reusable role catalog. When a task enters a state
+whose policy requires assurance, the helper must enlist every active
+specialist role in a required assurance check. This is asserted by the
+database from state policy, not from the state name.
 
-## Execution Timing Policy
+One worker may perform multiple assurance and control checks for a task, but
+the implementation lane remains separate. Every required check must pass or be
+explicitly marked not applicable with a rationale before Done.
 
-Every executable task, review increment, research slice, and control action is
-limited to five minutes of active worker time. Heartbeats do not extend the
-allotment. At three allotments without a new observable project artifact, the
-attempt is failed and returned for foreground refinement.
+Guidance is one versioned `guidance` table containing the former principles
+and tenets. `guidance_references` links guidance versions to the research
+references supporting them. Guidance is baseline input, not a review-policy
+engine.
 
-## Operating Sequence
+Design agents must inspect references linked to the intent and task, gather
+additional authoritative references when needed, and bind consequential design
+decisions to those sources.
 
-Use the least serial execution consistent with dependencies and risk:
+## Operating sequence
 
-1. Capture and triage the intent, ambiguity, risk, budgets, and authority.
-2. Discover local context, sources, established solutions, and decisions.
-3. Produce and independently validate a traceable design and proof strategy.
-4. Create coherent, bounded, reversible implementation slices.
-5. Execute ready work within WIP and autonomy limits.
-6. Verify exact revisions against acceptance criteria and applicable gates.
-7. Independently review and route bounded rework when necessary.
-8. Deliver only with required authority, safety, rollback, and readiness proof.
-9. Observe outcomes, close only on complete evidence, and record learning.
+1. Capture the intent and its type, success criteria, constraints, authority,
+   and stop conditions.
+2. Research the intent and link reviewed sources.
+3. Create bounded Backlog tasks linked to one or more intents.
+4. Refine tasks into the configured pullable entry state only when scope, ownership, acceptance, validation,
+   dependencies, and specialist assurance checks are present.
+5. Pull eligible work within state WIP and downstream capacity.
+6. Keep implementation isolated from assurance/control work.
+7. Move completed output into the configured review/validation state with
+   evidence and resolved checks. Review workers claim that existing review
+   state without moving it or replacing the implementation owner, then build
+   a fresh brief from current checks, evidence, revision, and task events.
+8. Move work into a terminal state only after that state’s required checks and
+   evidence qualify it.
+9. Re-evaluate the queues after every completion, review result, rework, or
+   capacity release; continue until no pullable work remains.
 
-Research, refinement, and independent read-only lanes may overlap when their
-dependencies and write ownership permit it. Numbering expresses causal
-obligations, not mandatory wasteful serialization.
+For autonomous execution, read `references/pull-flow.md` and load the
+`autonomous-workstream` skill. Use one long-lived supervisor and dynamic lanes;
+do not launch one worker per review criterion by default. Compatible review
+criteria should be serially consumed by a reusable specialist worker.
+If the selected runtime supports detached jobs, the autonomous skill may use
+its runtime adapter, but Kanban leases, task claims, evidence, and review
+independence remain authoritative.
 
-## Conditional References
+## Interaction modes
 
-Load only what the current operation needs:
+Distinguish the requested operating mode before changing state:
 
-- [board walk](references/board-walk.md): status reporting, WIP, movement,
-  review, and closure checks;
-- [backlog refinement](references/backlog-refinement.md): refining ideas into
-  ready, evidence-backed work;
-- [execution contracts](references/execution-contracts.md): autonomous runs,
-  stage/gate selection, evidence, specialist handoffs, rework, and recovery;
-- [specialist coordination](references/specialist-coordination.md): selecting
-  implementation-neutral expertise, assigning it to gates, and constructing
-  delegated role context;
-- [built-in quality](references/built-in-quality.md): versioned principles and
-  tenets, frozen guidance, production obligations, reusable assurance,
-  quality signals, constraints, and kaizen experiments;
-- [project specialists and bugs](references/project-specialists-and-bugs.md):
-  the canonical common mechanics for early enrollment, guidance proposals,
-  comprehensive existing-codebase review, and specialist-informed bug triage;
-- [delegation](references/delegation.md): only for multi-lane or background
-  coordination;
-- [validation contracts](references/validation-contracts.md): selecting a
-  domain-specific validation output;
-- [intents and migration](references/intents-and-migration.md): legacy backlog
-  migration and reference linkage;
-- [commands](references/commands.md): exact helper syntax;
-- [source register](references/source-register.md): adding, refreshing, or
-  superseding a governing source or principle.
+- **status:** inspect and report; do not start or change work;
+- **planning/refinement:** clarify, research, split, prioritize, and prepare
+  work; do not implement;
+- **execution:** pull, dispatch, implement, review, validate, and continue
+  until no pullable work remains or an explicit authority, dependency, or
+  external condition prevents progress.
 
-For detached, continuously resumable execution, load the
-`autonomous-workstream` skill. It owns the supervisor and worker lifecycle,
-event-driven dispatch, worker affinity and context reuse, leases, checkpoints,
-recovery, and run-level resource controls.
+Do not treat a completed slice as completion of an execution request.
 
-## Deterministic State Helper
+## Purge discipline
 
-Use `scripts/kanban.py` rather than editing the database directly. Initialize
-with `init`; validate with `validate`; use the typed intent, task, decision,
-run, envelope, gate, evidence, receipt, reference, learning, and metric commands
-documented in `references/commands.md`.
+Task purge is explicit and destructive, even though associated task records
+are cascaded. Before purging a task, confirm that it is terminal, required
+checks and evidence are complete, task events have been reviewed, and no
+follow-up, validation debt, or residual-risk decision still depends on it.
 
-Specialist documents must pass `handoff validate` and then `handoff ingest`.
-Only the committed receipt establishes acceptance; the helper atomically
-normalizes the handoff, evidence, sources, artifacts, findings, risks,
-decisions, gate result, and learning event.
+## Commands
 
-The helper is authoritative for enforced transitions and atomic records. Do not
-work around a failed constraint by editing SQLite manually. A tool limitation
-is a blocker or a reason to propose a reviewed migration, not permission to
-weaken policy.
+See [commands](references/commands.md) for the compact helper interface.
+Use `status --json` for scheduler-oriented state and `validate` for an explicit
+integrity audit.
 
-A task should not be marked in progress by supervisor intent alone. It becomes
-active only when a worker has actually claimed it, recorded the worker identity
-and start time, and can point to a concrete next bounded action. If the next
-slice cannot reasonably complete within five minutes of active execution, split
-it before a worker claim is recorded.
-
-### Checkpoint-And-Delta Context
-
-The helper is the durable shared memory for agent coordination. Support a
-reconstruction packet containing the immutable objective/task contract, latest
-accepted checkpoint, artifact and evidence references, blocker, and next
-bounded action. Workers and supervisors should exchange only compact deltas
-after the initial briefing: event/checkpoint ID, changed progress, proof,
-blocker, and next action. Do not copy full transcripts or unchanged source
-content between agents. On resume or replacement, use a fresh attempt briefing
-from the reconstruction packet; prior chat history is optional context, never a
-workflow dependency. Heartbeats must remain distinct from evidence-backed
-progress checkpoints.
-
-## Human Decisions And Status
-
-### Orphaned Work Recovery
-
-Kanban state is the durable recovery ledger; worker and supervisor processes
-are replaceable. A required task in `Active` without a responsive worker needs
-foreground reassessment before new work is pulled. Inspect the recorded
-baseline, checkpoint, evidence, blocker, and next action plus current
-filesystem and version-control state. Record whether the attempt is complete
-but unrecorded, partially resumable, unchanged and needing re-planning,
-externally blocked, or unsafe. Fence or close the old attempt and create a
-linked successor for remaining work; never silently requeue uncertain work.
-Heartbeat or worker prose alone is not progress evidence. A missing live
-worker is a recovery condition, not a global blocker when reassessment can
-continue it.
-
-For a material decision, persist one bounded question with viable options when
-known, a recommendation/default, impact of delay, and safe parallel work. After
-resolution, retain the answer, rationale, decider, and affected artifacts and
-update dependent work before resuming. Use clarification records only for
-factual unknowns.
-
-Status reports distinguish intents from work items and include active work,
-blocked work and exact unblock condition, review/validation state, open human
-decisions, WIP pressure, and the next pull candidate. Do not describe internal
-agent assignment as human ownership unless asked.
-
-## Closure
-
-Before moving non-trivial work to `Done` or realizing an intent, require:
-
-- satisfied acceptance criteria and complete revision-bound evidence;
-- all expected gates passed or evaluator-owned `not-applicable` records;
-- accepted independent review and resolved rework;
-- authorized delivery/readiness evidence when applicable;
-- explicit residual risk, exceptions, validation debt, and deferred work;
-- recorded outcome and learning events;
-- a repository documentation update or design-note update that captures the
-  durable result, remaining operational guidance, and any follow-up work that
-  should survive the task itself.
-
-After a task is done and its outcome has been reflected in repository
-documentation, the default Kanban retention window is five days after closure.
-Archival is an explicit maintenance action, not an automatic supervisor side
-effect. Before archival, preserve an immutable, searchable evidence manifest
-linking the intent, task, decisions, sources, reviews, validation, revisions,
-and learning events; verify that no validation debt, unresolved follow-up,
-blocker, or residual-risk decision remains; and retain the archive reference in
-Kanban. Project policy or human direction may extend the five-day period.
-
-Report partial or blocked outcomes honestly. Do not convert incomplete proof,
-budget exhaustion, or a plausible implementation into success.
+The command service has a deliberately narrow boundary: it provides
+transactional durable state changes, pull selection and claiming, capacity
+reservation, task events, checks, evidence, and scheduler-readable status.
+The supervisor owns ranking policy, worker dispatch, reuse, liveness, and
+inter-agent messages. Do not add persisted worker sessions or a general
+command bus to compensate for live coordination.
