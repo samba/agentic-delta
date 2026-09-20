@@ -80,14 +80,33 @@ Design agents must inspect references linked to the intent and task, gather
 additional authoritative references when needed, and bind consequential design
 decisions to those sources.
 
+Research is part of task refinement, not an optional postscript. Before a
+Backlog task is moved to `Ready`, the refining agent must review relevant
+intent/task references, select sensible authoritative material, and determine
+whether the task should adopt an existing pattern or deliberately extend it.
+The refinement record should identify the selected pattern and why it fits;
+new or reviewed sources should be linked to the intent or task. If no suitable
+existing pattern applies, record that conclusion and the evidence supporting
+the proposed approach.
+
+When the task may benefit from reusable software, open-source library
+selection is an explicit precursor to bespoke implementation. Research
+maintained candidate libraries first and compare capability fit, compatibility,
+integration cost, license, provenance, security, and replacement risk. Record
+the selected library and rationale, or record why no candidate is suitable,
+before refining implementation work into `Ready`.
+
 ## Operating sequence
 
 1. Capture the intent and its type, success criteria, constraints, authority,
    and stop conditions.
 2. Research the intent and link reviewed sources.
 3. Create bounded Backlog tasks linked to one or more intents.
-4. Refine tasks into the configured pullable entry state only when scope, ownership, acceptance, validation,
-   dependencies, and specialist assurance checks are present.
+4. Research and refine tasks into the configured pullable entry state only
+   when relevant references have been reviewed, an existing pattern has been
+   selected or consciously extended, any applicable open-source library
+   candidates have been evaluated, and scope, ownership, acceptance,
+   validation, dependencies, and specialist assurance checks are present.
 5. Pull eligible work within state WIP and downstream capacity.
 6. Keep implementation isolated from assurance/control work.
 7. Move completed output into the configured review/validation state with
@@ -98,6 +117,20 @@ decisions to those sources.
    evidence qualify it.
 9. Re-evaluate the queues after every completion, review result, rework, or
    capacity release; continue until no pullable work remains.
+
+An execution request is not complete when `Ready=0`, when one worker finishes,
+or when the foreground turn is ending. Before stopping, run a final scheduling
+pass that accounts for Backlog tasks whose dependencies and entry requirements
+are now satisfied, every actionable review item, and every recoverable stale or
+failed worker. If autonomous continuation was requested, verify that a
+detached supervisor job was actually accepted by the selected runtime;
+otherwise keep working in the foreground or clearly report that continuation is
+not active. A claimed “long-lived supervisor” without a live runtime job is
+not autonomous execution.
+
+When a worker is recoverable but cannot continue, use `task requeue` with a
+truthful reason and the appropriate predecessor state. Do not use Review as a
+generic holding state, and do not invent a blocked status for full capacity.
 
 For autonomous execution, read `references/pull-flow.md` and load the
 `autonomous-workstream` skill. Use one long-lived supervisor and dynamic lanes;

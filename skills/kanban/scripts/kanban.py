@@ -495,10 +495,14 @@ def task_show(conn: sqlite3.Connection, task_id: str) -> None:
 
 def task_refine(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
     task = require_task(conn, args.task_id)
-    if args.acceptance is None and args.validation is None and args.details is None:
-        fail("task refine requires --acceptance, --validation, or --details")
+    if all(value is None for value in (args.scope, args.owner, args.acceptance, args.validation, args.details)):
+        fail("task refine requires --scope, --owner, --acceptance, --validation, or --details")
     current_acceptance = loads(task["acceptance_json"], [])
     current_details = loads(task["details_json"], {})
+    scope = task["scope"] if args.scope is None else args.scope
+    owner = task["owner"] if args.owner is None else args.owner
+    if args.owner is not None and (not owner.strip() or owner == "unassigned"):
+        fail("Task refinement requires a concrete owner")
     acceptance = current_acceptance if args.acceptance is None else args.acceptance
     details = dict(current_details)
     if args.validation is not None:
@@ -506,6 +510,10 @@ def task_refine(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
     if args.details is not None:
         details.update(json_object(args.details, "details"))
     changed = []
+    if scope != task["scope"]:
+        changed.append("scope")
+    if owner != task["owner"]:
+        changed.append("owner")
     if acceptance != current_acceptance:
         changed.append("acceptance")
     if details != current_details:
@@ -515,8 +523,8 @@ def task_refine(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
         return
     with transaction(conn):
         conn.execute(
-            "UPDATE tasks SET acceptance_json=?, details_json=?, updated_at=? WHERE id=?",
-            (dumps(acceptance), dumps(details), now(), args.task_id),
+            "UPDATE tasks SET scope=?, owner=?, acceptance_json=?, details_json=?, updated_at=? WHERE id=?",
+            (scope, owner, dumps(acceptance), dumps(details), now(), args.task_id),
         )
         record_event(
             conn, args.task_id, "task_refined",
@@ -526,10 +534,58 @@ def task_refine(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
     print(f"refined task {args.task_id}: {', '.join(changed)}")
 
 
+def task_requeue(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
+    task = require_task(conn, args.task_id)
+    current = conn.execute("SELECT * FROM task_states WHERE id=?", (task["state_id"],)).fetchone()
+    target_id = state_id(conn, args.state) if args.state else current["previous_state_id"]
+    if target_id is None:
+        fail(f"Task {args.task_id} has no predecessor state to requeue into")
+    target = conn.execute("SELECT * FROM task_states WHERE id=?", (target_id,)).fetchone()
+    if target_id == task["state_id"]:
+        fail(f"Task {args.task_id} is already in {target['name']}")
+    with transaction(conn):
+        validate_task_requirements(conn, target_id, task=task)
+        if target["assurance_on_entry"]:
+            ensure_assurance_checks(conn, args.task_id)
+        changed = conn.execute(
+            "UPDATE tasks SET state_id=?, updated_at=? WHERE id=? AND state_id=?",
+            (target_id, now(), args.task_id, task["state_id"]),
+        ).rowcount
+        if changed != 1:
+            fail(f"Task {args.task_id} changed concurrently; retry requeue")
+        record_event(
+            conn, args.task_id, "requeued",
+            f"Requeued from {current['name']} to {target['name']}: {args.reason}",
+            args.actor, {"from": current["name"], "to": target["name"], "reason": args.reason},
+        )
+    print(f"requeued task {args.task_id} to {target['name']}")
+
+
 def task_purge(conn: sqlite3.Connection, task_id: str, confirm: bool) -> None:
     if not confirm:
         fail("Purging a task requires --confirm")
-    require_task(conn, task_id)
+    task = require_task(conn, task_id)
+    state = conn.execute("SELECT * FROM task_states WHERE id=?", (task["state_id"],)).fetchone()
+    if not state["terminal"]:
+        fail(f"Task {task_id} may only be purged from a terminal state")
+    gaps = task_requirement_gaps(conn, task["state_id"], task=task)
+    if state["requires_checks"]:
+        pending = conn.execute(
+            """SELECT 1 FROM task_checks
+               WHERE task_id=? AND required=1
+                 AND (status IN ('pending', 'failed')
+                      OR (status='not_applicable' AND (rationale IS NULL OR trim(rationale)='')))
+               LIMIT 1""",
+            (task_id,),
+        ).fetchone()
+        if pending:
+            gaps.append("accepted_checks")
+    if state["requires_evidence"] and not conn.execute(
+        "SELECT 1 FROM evidence WHERE task_id=? LIMIT 1", (task_id,)
+    ).fetchone():
+        gaps.append("evidence")
+    if gaps:
+        fail(f"Task {task_id} is not eligible for purge; missing: {', '.join(sorted(set(gaps)))}")
     with transaction(conn):
         deleted = conn.execute("DELETE FROM tasks WHERE id=?", (task_id,))
         if deleted.rowcount != 1:
@@ -1198,11 +1254,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = task.add_parser("add"); p.add_argument("task_id"); p.add_argument("summary"); p.add_argument("--intent", action="append", dest="intents", default=[]); p.add_argument("--state", default="Backlog"); p.add_argument("--type", dest="task_type", default="work"); p.add_argument("--owner", default="unassigned"); p.add_argument("--scope"); p.add_argument("--acceptance", action="append", default=[]); p.add_argument("--validation", action="append", default=[]); p.add_argument("--details", default="{}")
     p = task.add_parser("list"); p.add_argument("--state"); p.add_argument("--type", dest="task_type")
     p = task.add_parser("show"); p.add_argument("task_id")
-    p = task.add_parser("refine"); p.add_argument("task_id"); p.add_argument("--acceptance", action="append"); p.add_argument("--validation", action="append"); p.add_argument("--details"); p.add_argument("--actor", default="coordinator")
+    p = task.add_parser("refine"); p.add_argument("task_id"); p.add_argument("--scope"); p.add_argument("--owner"); p.add_argument("--acceptance", action="append"); p.add_argument("--validation", action="append"); p.add_argument("--details"); p.add_argument("--actor", default="coordinator")
     p = task.add_parser("purge"); p.add_argument("task_id"); p.add_argument("--confirm", action="store_true")
     p = task.add_parser("move"); p.add_argument("task_id"); p.add_argument("state"); p.add_argument("--actor", default="coordinator")
     p = task.add_parser("claim"); p.add_argument("task_id"); p.add_argument("--actor", required=True)
     p = task.add_parser("assign"); p.add_argument("task_id"); p.add_argument("owner"); p.add_argument("--actor", default="coordinator")
+    p = task.add_parser("requeue"); p.add_argument("task_id"); p.add_argument("--state"); p.add_argument("--reason", required=True); p.add_argument("--actor", default="coordinator")
     p = task.add_parser("event"); events = p.add_subparsers(dest="event_command", required=True); q = events.add_parser("add"); q.add_argument("task_id"); q.add_argument("event_type"); q.add_argument("summary"); q.add_argument("--actor", default="coordinator"); q.add_argument("--payload", default="{}"); q.add_argument("--idempotency-key"); q = events.add_parser("list"); q.add_argument("task_id"); q.add_argument("--limit", type=int, default=100); q.add_argument("--json", action="store_true", dest="as_json")
     p = task.add_parser("dependency"); dep = p.add_subparsers(dest="dependency_command", required=True); q = dep.add_parser("add"); q.add_argument("task_id"); q.add_argument("dependency_id"); q = dep.add_parser("remove"); q.add_argument("task_id"); q.add_argument("dependency_id")
     p = task.add_parser("demand"); demand = p.add_subparsers(dest="demand_command", required=True); q = demand.add_parser("set"); q.add_argument("task_id"); q.add_argument("--parallelism", choices=("serial", "partitionable", "fan-out"), required=True); q.add_argument("--min-workers", type=int, required=True); q.add_argument("--target-workers", type=int, required=True); q.add_argument("--max-workers", type=int, required=True); q.add_argument("--work-units", default="[]"); q.add_argument("--reuse-policy", required=True); q.add_argument("--isolation", required=True); q.add_argument("--aggregation", required=True)
@@ -1247,6 +1304,7 @@ def dispatch(args: argparse.Namespace, conn: sqlite3.Connection) -> int:
         elif args.task_command == "move": task_move(conn, args.task_id, args.state, args.actor)
         elif args.task_command == "claim": task_claim(conn, args.task_id, args.actor)
         elif args.task_command == "assign": task_assign(conn, args.task_id, args.owner, args.actor)
+        elif args.task_command == "requeue": task_requeue(conn, args)
         elif args.task_command == "event":
             if args.event_command == "add": task_event_add(conn, args)
             else: task_event_list(conn, args)

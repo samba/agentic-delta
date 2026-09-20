@@ -43,12 +43,14 @@ five-state workflow is only seed configuration.
 task add <id> <summary> --intent <intent-id> [--intent <intent-id> ...]
 task list [--state <state>] [--type <task-type>]
 task show <id>
-task refine <id> [--acceptance <criterion>] [--validation <criterion>] \
+task refine <id> [--scope <scope>] [--owner <owner>] \
+  [--acceptance <criterion>] [--validation <criterion>] \
   [--details '<json-object>'] [--actor <identity>]
 task purge <id> --confirm
 task move <id> <state-id-or-name>
 task claim <id> --actor <worker>
 task assign <id> <owner> [--actor <identity>]
+task requeue <id> [--state <state-id-or-name>] --reason <reason> [--actor <identity>]
 task event add <task-id> <event-type> <summary> [--actor <identity>] \
   [--payload '<json-object>'] [--idempotency-key <key>]
 task event list <task-id> [--json]
@@ -62,9 +64,23 @@ there, and records a claim event. If the task is already in a `review_queue`
 state, it records a review claim without moving the task or changing its
 implementation owner. It does not bind a capacity lease to the task.
 
-`task refine` updates acceptance criteria, validation criteria, or task details
-and records a refinement event. `task assign` changes the implementation owner
-and records an assignment event; it requires a concrete owner.
+`task refine` updates scope, owner, acceptance criteria, validation criteria,
+or task details and records a refinement event. `task assign` changes the
+implementation owner and records an assignment event; it requires a concrete
+owner. `task requeue` moves recoverable work to its predecessor (or an
+explicit state), records the recovery reason, and preserves truthful task
+history; it is not a blocked state.
+
+Before refining a task into `Ready`, review and link relevant research
+references, identify an existing pattern to adopt or extend, and record the
+selection and rationale in the task details. If no suitable pattern exists,
+record that conclusion and its supporting evidence.
+
+When reusable software may apply, investigate open-source library candidates
+before proposing bespoke implementation. Compare capability fit, compatibility,
+integration cost, license, provenance, security, and replacement risk, then
+record the selected library and rationale—or why none is suitable—in the task
+details.
 
 `task purge` permanently removes the task. Before using it, confirm that the
 task is terminal, required checks and evidence are complete, task events have

@@ -159,13 +159,20 @@ class KanbanKernelTest(unittest.TestCase):
 
     def test_task_purge_cascades_task_records_and_dependency_edges(self):
         self.run_cli("intent", "add", "goal", "Purgeable work")
-        self.run_cli("task", "add", "old-task", "Old task", "--intent", "goal", "--owner", "worker", "--scope", "one slice", "--acceptance", "accepted", "--validation", "validated")
+        self.run_cli("state", "add", "archive", "Archive", "--position", "45", "--previous", "review", "--next", "done", "--terminal")
+        self.run_cli("task", "add", "old-task", "Old task", "--intent", "goal", "--owner", "worker", "--scope", "one slice", "--acceptance", "accepted", "--validation", "validated", "--details", '{"plan":"bounded implementation"}')
         self.run_cli("task", "add", "survivor", "Surviving task", "--intent", "goal")
         self.run_cli("task", "dependency", "add", "survivor", "old-task")
         self.run_cli("task", "move", "old-task", "Ready")
+        self.run_cli("task", "move", "old-task", "Active")
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE tasks SET details_json=json_set(details_json, '$.completion', 'slice complete') WHERE id='old-task'")
+        self.run_cli("evidence", "add", "old-proof", "old-task", "artifact", "--result", "pass", "--producer", "worker")
+        self.run_cli("task", "move", "old-task", "Review")
         self.run_cli("evidence", "add", "old-evidence", "old-task", "artifact", "--result", "pass", "--producer", "worker")
-        self.run_cli("pull", "lease", "issue", "implementation", "--stage", "Active", "--lane", "worker", "--slots", "1", "--required-output", "implementation", "--owner", "coordinator", "--ttl-seconds", "60", "--idempotency-key", "purge-test")
-        self.run_cli("pull", "lease", "reserve", "implementation", "old-task")
+        self.run_cli("pull", "lease", "issue", "archive", "--stage", "Archive", "--lane", "archive", "--slots", "1", "--required-output", "archival", "--owner", "coordinator", "--ttl-seconds", "60", "--idempotency-key", "purge-test")
+        self.run_cli("pull", "lease", "reserve", "archive", "old-task")
+        self.run_cli("task", "move", "old-task", "Archive")
         self.run_cli("task", "purge", "old-task", "--confirm")
         self.assertIsNone(self.row("SELECT id FROM tasks WHERE id='old-task'"))
         self.assertIsNotNone(self.row("SELECT id FROM tasks WHERE id='survivor'"))
@@ -174,6 +181,12 @@ class KanbanKernelTest(unittest.TestCase):
         self.assertIsNone(self.row("SELECT task_id FROM task_checks WHERE task_id='old-task'"))
         self.assertIsNone(self.row("SELECT task_id FROM evidence WHERE task_id='old-task'"))
         self.assertIsNone(self.row("SELECT task_id FROM pull_capacity_reservations WHERE task_id='old-task'"))
+
+    def test_task_purge_rejects_nonterminal_tasks(self):
+        self.make_task("active-work")
+        with self.assertRaises(SystemExit):
+            self.run_cli("task", "purge", "active-work", "--confirm")
+        self.assertIsNotNone(self.row("SELECT id FROM tasks WHERE id='active-work'"))
 
     def test_review_records_role_and_worker_and_rejects_owner_self_review(self):
         self.make_task("reviewed")
@@ -242,15 +255,26 @@ class KanbanKernelTest(unittest.TestCase):
 
     def test_task_refinement_and_assignment_are_durable_operations(self):
         self.make_task("refinable")
-        self.run_cli("task", "refine", "refinable", "--acceptance", "updated", "--validation", "new proof", "--details", '{"risk":"low"}', "--actor", "planner")
+        self.run_cli("task", "refine", "refinable", "--scope", "replacement slice", "--acceptance", "updated", "--validation", "new proof", "--details", '{"risk":"low"}', "--actor", "planner")
         self.run_cli("task", "assign", "refinable", "reviewer", "--actor", "planner")
         task = __import__("json").loads(self._capture_cli("task", "show", "refinable"))
+        self.assertEqual(task["scope"], "replacement slice")
         self.assertEqual(task["acceptance"], ["updated"])
         self.assertEqual(task["details"]["validation"], ["new proof"])
         self.assertEqual(task["details"]["risk"], "low")
         self.assertEqual(task["owner"], "reviewer")
         event_types = {row["event_type"] for row in self._all("SELECT event_type FROM task_events WHERE task_id='refinable'")}
         self.assertTrue({"task_refined", "assigned"}.issubset(event_types))
+
+    def test_requeue_records_recovery_and_returns_to_predecessor(self):
+        self.make_task("stalled")
+        self.run_cli("task", "move", "stalled", "Ready")
+        self.run_cli("task", "move", "stalled", "Active")
+        self.run_cli("task", "requeue", "stalled", "--reason", "worker lease expired", "--actor", "supervisor")
+        self.assertEqual(self.row("SELECT s.name FROM tasks t JOIN task_states s ON s.id=t.state_id WHERE t.id='stalled'")[0], "Ready")
+        event = self.row("SELECT event_type, payload_json FROM task_events WHERE task_id='stalled' AND event_type='requeued'")
+        self.assertIsNotNone(event)
+        self.assertIn("worker lease expired", event["payload_json"])
 
     def _capture_cli(self, *args):
         output = io.StringIO()

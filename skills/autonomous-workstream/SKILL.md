@@ -85,6 +85,13 @@ the adapter.
 
 ## Queue-draining loop
 
+Before dispatching the first worker for an execution request, establish the
+supervisor lifetime. If background continuation is requested, submit and
+verify one detached supervisor job through the runtime adapter; retain its job
+identity and task/lease scope in the foreground handoff. If the adapter cannot
+provide a live detached job, continue the loop in the foreground and say so;
+do not imply that work will continue after the turn ends.
+
 Every supervisor wake performs a queue-drain scheduling pass:
 
 1. refresh Kanban status and active pull-capacity leases;
@@ -102,6 +109,12 @@ Every supervisor wake performs a queue-drain scheduling pass:
 Continue until no unblocked pullable work remains, or work is permission-gated,
 manually reserved, externally blocked, or explicitly deferred. Completion of a
 single slice is a scheduling event, not a reason to stop.
+
+The supervisor may stop only after a final pass confirms all of the following:
+no actionable review/validation item remains, no recoverable stale worker
+remains, no dependency-unblocked candidate is stranded in Backlog, Ready, or
+an entry state, and no detached worker or supervisor job is still active. An
+empty Ready queue alone is never a completion signal.
 
 ## Pull and backpressure
 
@@ -164,6 +177,13 @@ task event before dispatching again.
 Heartbeats and chat are liveness signals, not durable proof. Durable events
 should record meaningful milestones, blockers, next actions, state transitions,
 review outcomes, and evidence references.
+
+Meaningful progress includes a worker report, completed research, test
+execution, evidence collection, review/check recording, artifact creation, or
+a meaningful repository change. A filesystem delta is not required for
+read-only research, validation, or assurance work. If a worker is responsive
+but cannot continue, recover it with a bounded requeue or fresh briefing and
+record the recovery event before dispatching again.
 
 ## Assurance and control
 
