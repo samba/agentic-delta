@@ -318,6 +318,27 @@ def state_list(conn: sqlite3.Connection) -> None:
         print("\t".join(str(row[key] or "") for key in ("id", "name", "previous_state_id", "next_state_id", "wip_limit", "assurance_on_entry", "worker_entry", "review_queue", "requires_checks", "requires_evidence", "requires_reviewed_references", "terminal")))
 
 
+def state_set(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
+    target = state_id(conn, args.state)
+    if args.unlimited:
+        wip_limit = None
+    elif args.wip_limit is not None:
+        if args.wip_limit <= 0:
+            fail("WIP limit must be positive")
+        wip_limit = args.wip_limit
+    else:
+        fail("state set requires --wip-limit or --unlimited")
+    with transaction(conn):
+        updated = conn.execute(
+            "UPDATE task_states SET wip_limit=? WHERE id=? AND active=1",
+            (wip_limit, target),
+        )
+        if updated.rowcount != 1:
+            fail(f"Unknown task state: {args.state}")
+    label = "unlimited" if wip_limit is None else str(wip_limit)
+    print(f"set {state_name(conn, target)} WIP limit to {label}")
+
+
 def record_event(
     conn: sqlite3.Connection,
     task_id: str,
@@ -1239,6 +1260,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.add_argument("--json", action="store_true", dest="as_json")
     p_state = sub.add_parser("state"); state = p_state.add_subparsers(dest="state_command", required=True)
     q = state.add_parser("add"); q.add_argument("state_id"); q.add_argument("name"); q.add_argument("--position", type=int, required=True); q.add_argument("--previous"); q.add_argument("--next"); q.add_argument("--wip-limit", type=int); q.add_argument("--required-fields", default="[]"); q.add_argument("--assurance-on-entry", action="store_true"); q.add_argument("--worker-entry", action="store_true"); q.add_argument("--review-queue", action="store_true"); q.add_argument("--requires-checks", action="store_true"); q.add_argument("--requires-evidence", action="store_true"); q.add_argument("--requires-reviewed-references", action="store_true"); q.add_argument("--terminal", action="store_true")
+    q = state.add_parser("set"); q.add_argument("state"); wip = q.add_mutually_exclusive_group(required=True); wip.add_argument("--wip-limit", type=int); wip.add_argument("--unlimited", action="store_true")
     state.add_parser("list")
 
     p_intent = sub.add_parser("intent"); intent = p_intent.add_subparsers(dest="intent_command", required=True)
@@ -1284,6 +1306,7 @@ def dispatch(args: argparse.Namespace, conn: sqlite3.Connection) -> int:
         status(conn, args.as_json); return 0
     if args.command == "state":
         if args.state_command == "add": state_add(conn, args)
+        elif args.state_command == "set": state_set(conn, args)
         else: state_list(conn)
         return 0
     if args.command in ("intent", "goal"):

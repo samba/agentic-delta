@@ -16,12 +16,14 @@ recent meaningful progress. Expiry releases capacity without moving the task to
 `Blocked` and without creating a capacity-status task event.
 
 Choose the next task by downstream eligibility first, then critical-path or
-unblock impact, then concrete end-to-end user capability, then shortest
-estimated job, then age, then task priority. Prefer work that produces a usable
-and independently verifiable user capability over equivalent internal or
-plumbing work. Use shortest-job-first only among otherwise comparable tasks and
-apply aging so longer tasks are not starved. Pull only work that satisfies the
-next stage's entry contract and has a bounded handoff to its required output.
+unblock impact, then outcome advancement, then shortest estimated job, then age,
+then task priority. Outcome advancement means choosing the task that most
+advances an intent toward a concrete, usable, and independently verifiable user
+capability. An outcome may span several bounded tasks; do not require each
+individual task to be independently end-to-end. Use shortest-job-first only
+among otherwise comparable tasks and apply aging so longer tasks are not
+starved. Pull only work that satisfies the next stage's entry contract and has
+a bounded handoff to its required output.
 
 ## WIP and worker demand
 

@@ -32,12 +32,19 @@ state add <id> <name> --position <n> [--previous <state-id>] [--next <state-id>]
   [--assurance-on-entry] [--worker-entry] [--review-queue] \
   [--requires-checks] [--requires-evidence] \
   [--requires-reviewed-references] [--terminal]
+state set <state-id-or-name> --wip-limit <n>
+state set <state-id-or-name> --unlimited
 ```
 
 States are process steps, not aliases for the default names. Their display
 names may be arbitrary. Policy flags define what happens at that step; the
 predecessor and successor define the linear process sequence. The default
 five-state workflow is only seed configuration.
+
+`state set` changes an existing state's WIP budget when the user explicitly
+instructs the agent to change project capacity. It changes admission capacity;
+it does not move existing tasks, change task status, or create a blocked status
+when the budget is full.
 
 ```bash
 task add <id> <summary> --intent <intent-id> [--intent <intent-id> ...]

@@ -41,27 +41,18 @@ process, not a durable database object; it may be replaced at any time.
 
 ## Pull and flow rules
 
-The coordinator optimizes for pull: downstream capacity requests the next most
-ready work. Among eligible work, prefer concrete end-to-end user capabilities
-that can be independently verified, then shorter jobs when otherwise
-comparable; apply aging so long-running work is not starved. WIP limits
-constrain task buffering and do not prescribe agent counts. Serial and parallel
-task demand remain separate from agent count.
-Review WIP is additional to implementation WIP. A full state is an
-interrupt signal for the supervisor; it is not a task blocker and must not
-create a fake blocked status.
+Read [pull-flow](references/pull-flow.md) before scheduling or dispatching.
+Its detailed contract is canonical. The local invariants are:
 
-Pull-capacity leases reserve short-lived downstream capacity, not specific
-tasks. They may expire or be released without changing task state. Backpressure
-must slow upstream admission before new work is started when downstream review
-or validation capacity is full.
-
-Worker demand is a property of a task. Serial work uses one reusable worker;
-partitionable or fan-out work may use more workers only when independent work
-units are already defined. Assurance/control workers must not implement the
-same task. Every assignment must have one bounded next action and an expected
-progress checkpoint; a worker must not receive an unbounded workstream as one
-claim.
+- downstream capacity pulls work; outcome advancement outranks task-local
+  convenience, and shortest-job preference applies only among comparable work;
+- WIP limits govern task buffering and parallel task flow, not agent count;
+- review WIP is additional to implementation WIP; a full state interrupts the
+  supervisor but does not create a fake blocked task status;
+- pull-capacity leases reserve short-lived capacity, not specific tasks;
+- scale only from actual demand, reuse compatible workers serially, and keep
+  assurance/control independent from implementation;
+- every assignment has one bounded next action and an expected checkpoint.
 
 ## Assurance and control
 
@@ -166,6 +157,8 @@ follow-up, validation debt, or residual-risk decision still depends on it.
 ## Commands
 
 See [commands](references/commands.md) for the compact helper interface.
+Read that reference before invoking the helper; its common command examples
+are the tested operational cookbook, so routine CLI discovery is unnecessary.
 Use `status --json` for scheduler-oriented state and `validate` for an explicit
 integrity audit.
 

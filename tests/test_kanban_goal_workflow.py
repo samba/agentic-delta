@@ -108,6 +108,14 @@ class KanbanKernelTest(unittest.TestCase):
         self.assertEqual(self.row("SELECT status FROM pull_capacity_leases WHERE id='review-capacity'")[0], "released")
         self.assertIsNone(self.row("SELECT name FROM sqlite_master WHERE type='table' AND name='runs'"))
 
+    def test_existing_state_wip_budget_can_be_changed_explicitly(self):
+        self.run_cli("state", "set", "Active", "--wip-limit", "1")
+        self.assertEqual(self.row("SELECT wip_limit FROM task_states WHERE id='active'")[0], 1)
+        self.run_cli("state", "set", "Active", "--unlimited")
+        self.assertIsNone(self.row("SELECT wip_limit FROM task_states WHERE id='active'")[0])
+        with self.assertRaises(SystemExit):
+            self.run_cli("state", "set", "Active", "--wip-limit", "0")
+
     def test_research_references_and_guidance_are_linked(self):
         self.run_cli("intent", "add", "goal", "Design a capability", "--type", "capability")
         self.run_cli("reference", "add", "source-1", "https://example.test/source", "--title", "Source")

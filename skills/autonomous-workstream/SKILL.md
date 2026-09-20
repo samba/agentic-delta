@@ -16,6 +16,10 @@ the durable task record and live repository state.
 For live progress, lease renewal, timeout, and recovery messaging, read
 `kanban/references/coordination-protocol.md`.
 
+Before scheduling or dispatching, read `kanban/references/pull-flow.md` for
+the canonical pull, prioritization, WIP, backpressure, and worker-demand
+contract. Do not reconstruct that contract from memory or from CLI help.
+
 When the selected agent platform offers detached jobs or background sessions,
 also read `references/runtime-adapters.md`. Use the platform adapter for
 dispatch and monitoring; retain the same Kanban lease and worker contracts.
@@ -118,30 +122,12 @@ empty Ready queue alone is never a completion signal.
 
 ## Pull and backpressure
 
-This is the shared pull-flow contract with the Kanban skill.
-
-Optimize for pull rather than push. Downstream lanes issue short-lived
-renewable capacity leases. A lease reserves capacity, not a specific task, and
-expiry releases capacity without changing task state.
-
-WIP limits govern task buffering and parallel task flow, not worker count. A
-full downstream review/validation or implementation state is an interrupt
-signal to clear that state; it is not a task blocker. Scale only when
-necessary to satisfy actual downstream demand, and reuse a compatible live
-worker serially whenever possible.
-
-When downstream capacity is full, stop admitting upstream work and prioritize
-completion, validation, rework, or review that releases the capacity. Selection
-order is:
-
-1. downstream eligibility;
-2. critical-path or unblock impact;
-3. concrete end-to-end usable and independently verifiable user capability;
-4. shortest estimated job among otherwise comparable tasks, with aging to
-   prevent starvation;
-5. oldest eligible work;
-6. task priority;
-7. worker affinity and context reuse.
+Read the shared pull-flow contract before this pass. Its local operational
+rules are: downstream capacity pulls work; full downstream WIP creates
+backpressure; outcome advancement precedes shortest-job preference; aging
+prevents starvation; WIP limits do not prescribe agent counts; and compatible
+workers should be reused serially when demand permits. A full state is an
+interrupt signal, not a task blocker.
 
 ## Task worker demand
 

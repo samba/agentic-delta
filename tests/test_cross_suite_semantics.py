@@ -80,6 +80,19 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         for name in expected:
             self.assertTrue((root / name).is_file(), name)
 
+    def test_kanban_command_cookbook_keeps_common_operational_examples(self):
+        commands = (DELTA / "skills/kanban/references/commands.md").read_text()
+        for example in (
+            "status --json",
+            "task refine",
+            "task requeue",
+            "pull next",
+            "review check record",
+            "evidence add",
+            "state set <state-id-or-name> --wip-limit <n>",
+        ):
+            self.assertIn(example, commands)
+
     def test_normative_invariants_remain_enforced_or_owned(self):
         guidance = (DELTA / "skills/kanban/SKILL.md").read_text()
         coordination = (DELTA / "skills/kanban/references/coordination-protocol.md").read_text()
