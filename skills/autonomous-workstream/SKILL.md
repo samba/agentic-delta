@@ -136,9 +136,12 @@ order is:
 
 1. downstream eligibility;
 2. critical-path or unblock impact;
-3. oldest eligible work;
-4. task priority;
-5. worker affinity and context reuse.
+3. concrete end-to-end usable and independently verifiable user capability;
+4. shortest estimated job among otherwise comparable tasks, with aging to
+   prevent starvation;
+5. oldest eligible work;
+6. task priority;
+7. worker affinity and context reuse.
 
 ## Task worker demand
 

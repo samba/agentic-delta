@@ -42,8 +42,11 @@ process, not a durable database object; it may be replaced at any time.
 ## Pull and flow rules
 
 The coordinator optimizes for pull: downstream capacity requests the next most
-ready work. WIP limits constrain task buffering and do not prescribe agent
-counts. Serial and parallel task demand remain separate from agent count.
+ready work. Among eligible work, prefer concrete end-to-end user capabilities
+that can be independently verified, then shorter jobs when otherwise
+comparable; apply aging so long-running work is not starved. WIP limits
+constrain task buffering and do not prescribe agent counts. Serial and parallel
+task demand remain separate from agent count.
 Review WIP is additional to implementation WIP. A full state is an
 interrupt signal for the supervisor; it is not a task blocker and must not
 create a fake blocked status.
