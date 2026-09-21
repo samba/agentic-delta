@@ -235,6 +235,7 @@ def init_db(conn: sqlite3.Connection, schema_path: Path = DEFAULT_SCHEMA_PATH, l
                 if column not in check_columns:
                     conn.execute(f"ALTER TABLE task_checks ADD COLUMN {column} {definition}")
             for trigger in (
+                "task_state_wip_guard", "task_insert_wip_guard",
                 "task_assurance_roster_guard", "task_done_checks_guard",
                 "task_done_evidence_guard", "task_check_delete_guard",
                 "task_reviewed_references_guard",
@@ -705,10 +706,6 @@ def pull_candidates(conn: sqlite3.Connection, lease: sqlite3.Row | None = None) 
                 blockers.append("successor-not-worker-entry")
             if not review_claim and target["previous_state_id"] != task["state_id"]:
                 blockers.append("not-upstream-of-target")
-            if target["wip_limit"] is not None and not review_claim:
-                occupied = conn.execute("SELECT COUNT(*) FROM tasks WHERE state_id=?", (target["id"],)).fetchone()[0]
-                if occupied >= target["wip_limit"]:
-                    blockers.append("target-wip-full")
             if review_claim:
                 reserved = conn.execute(
                     """SELECT 1 FROM pull_capacity_reservations
@@ -1169,6 +1166,7 @@ def status(conn: sqlite3.Connection, as_json: bool) -> None:
         item = dict(row)
         item["available"] = None if item["wip_limit"] is None else max(item["wip_limit"] - item["count"], 0)
         item["full"] = item["wip_limit"] is not None and item["count"] >= item["wip_limit"]
+        item["overage"] = None if item["wip_limit"] is None else max(item["count"] - item["wip_limit"], 0)
         rows.append(item)
     active_leases = []
     for row in conn.execute("""SELECT l.id, l.stage, l.lane, l.slots, l.expires_at,
@@ -1184,6 +1182,17 @@ def status(conn: sqlite3.Connection, as_json: bool) -> None:
     backpressure = [
         {"state": row["state"], "upstream": row["previous_state"], "reason": "downstream-wip-full"}
         for row in rows if row["full"] and row["previous_state"]
+    ]
+    worker_entry_ids = {row["id"] for row in rows if row["worker_entry"]}
+    board_walk = [
+        row for row in rows
+        if not row["terminal"]
+        and row["state"].lower() != "backlog"
+        and (
+            row["worker_entry"]
+            or row["review_queue"]
+            or row["next_state_id"] in worker_entry_ids
+        )
     ]
     review = [row for row in rows if row["review_queue"]]
     review_pressure = None
@@ -1206,6 +1215,7 @@ def status(conn: sqlite3.Connection, as_json: bool) -> None:
         "active_leases": active_leases,
         "candidates": candidates,
         "backpressure": backpressure,
+        "board_walk": board_walk,
         "review_pressure": review_pressure,
         "tasks": [dict(r) for r in conn.execute("SELECT t.id, s.name AS state, t.task_type, t.owner, t.summary FROM tasks t JOIN task_states s ON s.id=t.state_id ORDER BY s.position, t.id")],
     }

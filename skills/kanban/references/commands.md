@@ -42,9 +42,10 @@ predecessor and successor define the linear process sequence. The default
 five-state workflow is only seed configuration.
 
 `state set` changes an existing state's WIP budget when the user explicitly
-instructs the agent to change project capacity. It changes admission capacity;
-it does not move existing tasks, change task status, or create a blocked status
-when the budget is full.
+instructs the agent to change project capacity. It changes the soft flow
+budget; it does not move existing tasks or change task status. Overage is
+allowed and exposed by `status --json` so the supervisor can prioritize
+clearing it without creating a blocked status.
 
 ```bash
 task add <id> <summary> --intent <intent-id> [--intent <intent-id> ...]

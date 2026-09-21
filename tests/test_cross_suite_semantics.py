@@ -131,6 +131,11 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         self.assertIn("Every supervisor wake performs a queue-drain scheduling pass", workstream)
         self.assertIn("Do not launch one worker per criterion by default", workstream)
         self.assertIn("until no unblocked pullable work remains", workstream)
+        self.assertIn("walk the active board", workstream)
+        self.assertIn("Ready is below its finite WIP limit", workstream)
+        self.assertIn("research-capable refinement workers", workstream)
+        self.assertIn("does not perform", workstream)
+        self.assertIn("research or refinement itself", workstream)
 
     def test_autonomous_role_topology_keeps_control_and_production_distinct(self):
         workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
@@ -151,7 +156,7 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         self.assertIn("backpressure", pull.lower())
         self.assertIn("pull-flow.md", kanban)
         self.assertIn("pull-flow contract", workstream)
-        self.assertIn("preparation, research, and validation lanes", workstream)
+        self.assertIn("preparation/refinement/research and validation lanes", workstream)
 
 
 if __name__ == "__main__":

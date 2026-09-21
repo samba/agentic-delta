@@ -32,8 +32,9 @@ Use one long-lived supervisor process or session plus dynamic specialist lanes:
   backpressure, and continuously schedules the next action;
 - Review lane: assurance/control workers perform task-bound review only;
 - Implementation lane: implementation workers perform task implementation only;
-- preparation, research, and validation lanes are created only when pullable
-  work requires them.
+- preparation/refinement/research and validation lanes are created only when
+  pullable work requires them. Ready replenishment belongs to a
+  research-capable preparation worker, not the low-cost supervisor.
 
 An assurance/control worker may perform both functions for the same task and
 may serially review multiple compatible tasks. It must not implement a task it
@@ -98,17 +99,35 @@ do not imply that work will continue after the turn ends.
 
 Every supervisor wake performs a queue-drain scheduling pass:
 
-1. refresh Kanban status and active pull-capacity leases;
-2. collect work from configured review/validation states before admitting new
+1. walk the active board with `status --json`, inspecting only Ready, Active,
+   Review, or their configured policy equivalents; exclude Backlog and terminal
+   states from the walk;
+2. refresh active pull-capacity leases and expose each walked state's occupancy,
+   WIP limit, fullness, and overage;
+3. prioritize clearing WIP overage and actionable downstream work;
+4. when Ready is below its finite WIP limit, dispatch bounded,
+   research-capable refinement workers for the most valuable eligible Backlog
+   candidates; the supervisor selects and briefs this work but does not perform
+   its research or refinement itself;
+5. collect work from configured review/validation states before admitting new
    implementation when those states are the active constraint;
-3. prioritize the smallest unblocker that releases downstream pull capacity;
-4. group compatible assurance/control checks for serial specialist reuse;
-5. pull the next most-ready tasks only when downstream capacity exists;
-6. start only the workers necessary for current pullable work, each with a
+6. prioritize the smallest unblocker that releases downstream pull capacity;
+7. group compatible assurance/control checks for serial specialist reuse;
+8. pull the next most-ready tasks only when downstream capacity exists;
+9. start only the workers necessary for current pullable work, each with a
    bounded next action, expected progress checkpoint, and compact authority
    briefing;
-7. after every completion, rework result, validation result, or capacity release,
+10. after every completion, rework result, validation result, or capacity release,
    repeat the pass.
+
+The walk also runs periodically while workers remain active, not only after a
+worker event. A Ready deficit is a pull signal for research and refinement, not
+permission to start unbounded refinement or implementation work. Cap dispatch
+by the deficit, defined worker demand, available authority, and downstream
+flow. The refinement worker must review task- and intent-linked research,
+gather additional sources when needed, evaluate reusable open-source libraries
+and existing patterns, and record the rationale before moving the task to
+Ready.
 
 Continue until no unblocked pullable work remains, or work is permission-gated,
 manually reserved, externally blocked, or explicitly deferred. Completion of a
@@ -123,11 +142,12 @@ empty Ready queue alone is never a completion signal.
 ## Pull and backpressure
 
 Read the shared pull-flow contract before this pass. Its local operational
-rules are: downstream capacity pulls work; full downstream WIP creates
-backpressure; outcome advancement precedes shortest-job preference; aging
-prevents starvation; WIP limits do not prescribe agent counts; and compatible
-workers should be reused serially when demand permits. A full state is an
-interrupt signal, not a task blocker.
+rules are: downstream capacity pulls work; full downstream WIP creates a
+priority interrupt rather than a hard admission stop; outcome advancement
+precedes shortest-job preference; aging prevents starvation; WIP limits are
+soft flow budgets and do not prescribe agent counts; and compatible workers
+should be reused serially when demand permits. A full state is not a task
+blocker.
 
 ## Task worker demand
 

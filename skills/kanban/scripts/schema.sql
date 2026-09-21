@@ -236,29 +236,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS pull_active_task_idx
     ON pull_capacity_reservations(task_id)
     WHERE status = 'active';
 
-CREATE TRIGGER IF NOT EXISTS task_state_wip_guard
-BEFORE UPDATE OF state_id ON tasks
-WHEN NEW.state_id <> OLD.state_id
-BEGIN
-    SELECT CASE WHEN (
-        SELECT wip_limit FROM task_states WHERE id = NEW.state_id
-    ) IS NOT NULL AND (
-        SELECT COUNT(*) FROM tasks WHERE state_id = NEW.state_id AND id <> NEW.id
-    ) >= (
-        SELECT wip_limit FROM task_states WHERE id = NEW.state_id
-    ) THEN RAISE(ABORT, 'task state WIP limit reached') END;
-END;
-
-CREATE TRIGGER IF NOT EXISTS task_insert_wip_guard
-BEFORE INSERT ON tasks
-WHEN (SELECT wip_limit FROM task_states WHERE id = NEW.state_id) IS NOT NULL
-BEGIN
-    SELECT CASE WHEN (
-        SELECT COUNT(*) FROM tasks WHERE state_id = NEW.state_id
-    ) >= (SELECT wip_limit FROM task_states WHERE id = NEW.state_id)
-    THEN RAISE(ABORT, 'task state WIP limit reached') END;
-END;
-
 CREATE TRIGGER IF NOT EXISTS task_state_sequence_guard
 BEFORE UPDATE OF state_id ON tasks
 WHEN NEW.state_id <> OLD.state_id

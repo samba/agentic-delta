@@ -46,9 +46,11 @@ Its detailed contract is canonical. The local invariants are:
 
 - downstream capacity pulls work; outcome advancement outranks task-local
   convenience, and shortest-job preference applies only among comparable work;
-- WIP limits govern task buffering and parallel task flow, not agent count;
-- review WIP is additional to implementation WIP; a full state interrupts the
-  supervisor but does not create a fake blocked task status;
+- WIP limits are soft flow budgets, not admission guards or agent-count caps;
+  overage is allowed when parallelism advances the outcome;
+- review WIP is additional to implementation WIP; a full or over-limit state
+  interrupts the supervisor and drives the next-action priority, but does not
+  create a fake blocked task status;
 - pull-capacity leases reserve short-lived capacity, not specific tasks;
 - scale only from actual demand, reuse compatible workers serially, and keep
   assurance/control independent from implementation;
@@ -111,6 +113,17 @@ before refining implementation work into `Ready`.
    evidence qualify it.
 9. Re-evaluate the queues after every completion, review result, rework, or
    capacity release; continue until no pullable work remains.
+
+The supervisor periodically walks the board using `status --json`. The walk
+focuses on the active work path—Ready, Active, and Review or their configured
+state-policy equivalents—and excludes Backlog and terminal states. It exposes
+occupancy, WIP limit, fullness, and overage for each walked state. Resolve
+overage and actionable downstream work before pulling more work. When Ready is
+below its finite WIP limit, dispatch bounded, research-capable refinement
+workers to replenish Ready from the most valuable eligible Backlog candidates,
+subject to the current pull path and refinement capacity. The low-cost
+supervisor detects and dispatches this work; it does not perform the research or
+refinement itself.
 
 An execution request is not complete when `Ready=0`, when one worker finishes,
 or when the foreground turn is ending. Before stopping, run a final scheduling

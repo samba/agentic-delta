@@ -91,7 +91,7 @@ class KanbanKernelTest(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_wip_and_pull_leases_are_enforced_without_runs(self):
+    def test_wip_pressure_is_visible_and_does_not_block_parallel_flow(self):
         self.make_task("one")
         self.run_cli("task", "move", "one", "Ready")
         self.run_cli("task", "move", "one", "Active")
@@ -100,8 +100,11 @@ class KanbanKernelTest(unittest.TestCase):
             self.run_cli("task", "move", task_id, "Ready")
             if task_id != "four":
                 self.run_cli("task", "move", task_id, "Active")
-        with self.assertRaises(SystemExit):
-            self.run_cli("task", "move", "four", "Active")
+        self.run_cli("task", "move", "four", "Active")
+        status = __import__("json").loads(self._capture_cli("status", "--json"))
+        active = next(row for row in status["states"] if row["state"] == "Active")
+        self.assertTrue(active["full"])
+        self.assertEqual(active["overage"], 1)
         self.run_cli("pull", "lease", "issue", "review-capacity", "--stage", "Review", "--lane", "reviewer", "--slots", "2", "--eligibility", '{"type":"review"}', "--required-output", "pass or rework", "--owner", "supervisor", "--ttl-seconds", "60", "--idempotency-key", "lease-1")
         self.run_cli("pull", "lease", "renew", "review-capacity", "--ttl-seconds", "120")
         self.run_cli("pull", "lease", "release", "review-capacity")
@@ -130,7 +133,11 @@ class KanbanKernelTest(unittest.TestCase):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             self.run_cli("status", "--json")
-        self.assertIn('"Backlog"', output.getvalue())
+        payload = __import__("json").loads(output.getvalue())
+        walked = {row["state"] for row in payload["board_walk"]}
+        self.assertTrue({"Ready", "Active", "Review"}.issubset(walked))
+        self.assertNotIn("Backlog", walked)
+        self.assertNotIn("Done", walked)
         self.run_cli("validate")
 
     def test_pull_next_selects_and_claims_atomically(self):

@@ -27,9 +27,9 @@ a bounded handoff to its required output.
 
 ## WIP and worker demand
 
-Column WIP limits govern task buffering and parallel task flow, not worker
-count. Review/validation-state WIP is independent from implementation-state
-WIP. A review slot may
+Column WIP limits are soft flow budgets: they indicate desired buffering and
+parallel task flow, but do not reject task admission or prescribe worker count.
+Review/validation-state WIP is independent from implementation-state WIP. A review slot may
 use multiple agents when the task demand requires it; several compatible tasks
 may share one persistent worker serially.
 
@@ -49,15 +49,19 @@ limits. It does not scale merely because parallelism is possible.
 ## Backpressure
 
 Observe pressure independently for implementation, review, validation, and
-delivery. Use occupancy, oldest-item age, arrival and completion rates, worker
-demand, and predicted time to WIP breach. A full downstream buffer throttles
-only its immediate upstream stage; tasks retain their ordinary `Ready`,
+delivery. Use occupancy, overage, oldest-item age, arrival and completion rates,
+worker demand, and predicted time to WIP breach. A full downstream buffer raises
+the priority of completing, validating, repairing, or reviewing that state; it
+does not itself reject upstream admission. Tasks retain their ordinary `Ready`,
 `Active`, or `Review` state.
 
 If downstream work is independently executable, scale its workers when pressure
 shows that capacity would reduce delay. If it is waiting on an approval,
 dependency, shared write, or unavailable artifact, do not scale; leave the
-work in its ordinary state until the downstream condition changes.
+work in its ordinary state until the downstream condition changes. Parallel
+implementation may continue past a soft downstream WIP budget when its defined
+work units advance a valuable outcome and the supervisor continues to
+prioritize clearing the overage.
 
 ## Completion priority
 
