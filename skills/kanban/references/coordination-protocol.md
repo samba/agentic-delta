@@ -5,6 +5,20 @@ It is intentionally ephemeral: Kanban persists meaningful task events, checks,
 evidence, and pull-capacity leases; it does not persist runs, attempts,
 heartbeats, or chat transcripts.
 
+## Authority boundary
+
+The supervisor is coordinator-only. It may select, dispatch, poll, renew,
+requeue, recover, and report, but it must not claim implementation work,
+manufacture worker checkpoints, or present its administrative events as worker
+progress. A worker must acknowledge its task and lease through the live runtime
+channel before it claims `Active` or reports implementation progress.
+
+Worker identity, liveness, start time, checkpoint age, fencing, and replacement
+idempotence belong to the live runtime adapter and supervisor memory. They must
+not be added as Kanban tables or simulated with durable task events. If a live
+worker acknowledgement cannot be obtained, leave work in `Ready` and report
+the dispatch failure.
+
 ## Progress messages
 
 Send compact deltas, not repeated briefings or full transcripts. A progress
@@ -35,14 +49,21 @@ reassignment. If the worker is responsive but produces no observable progress
 across the configured checkpoint window, classify the lane as stalled and
 escalate for recovery; do not fabricate success.
 
+Administrative claims, rebriefs, requeues, and recovery decisions do not reset
+worker progress age. Staleness uses the last meaningful worker checkpoint held
+by the live supervisor, not task `updated_at`.
+
 ## Recovery
 
 On wake or restart, inspect current task state, owner, dependencies, latest
 meaningful events, checks, evidence, and filesystem/version-control state.
-Choose resume, rework, review, or reassignment; record the decision as a task
-event, stop using the stale lease, and issue a fresh briefing. “Fence” means
-that the stale lease cannot dispatch more work; it does not require a fencing
-table. Never depend on a removed run record or replay an old chat transcript.
+Reconcile live adapter workers, fence any stale worker before replacement, then
+choose resume, rework, review, or reassignment. Record the meaningful decision
+as a task event, stop using the stale lease, and issue a fresh briefing. “Fence”
+means that the stale runtime worker cannot dispatch more work; it does not
+require a fencing table. Recovery is idempotent in the live supervisor, not in
+persisted run history. Never depend on a removed run record or replay an old
+chat transcript.
 Independent lanes may continue while one lane waits for authority, a
 dependency, or recovery.
 

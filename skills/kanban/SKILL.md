@@ -14,6 +14,13 @@ Use `scripts/kanban.py` for all Kanban state changes. Do not edit the SQLite
 database directly. The autonomous-workstream skill owns live worker sessions,
 worker reuse, scheduling, queue draining, and recovery decisions.
 
+Kanban does not verify runtime worker liveness or own dispatch handshakes. The
+supervisor and selected runtime adapter own live supervisor/worker identities,
+acknowledgements, checkpoints, fencing, and replacement idempotence. Kanban
+persists only durable workflow state and meaningful outcomes; do not add worker
+registries, checkpoint tables, or run history to compensate for live
+coordination.
+
 ## Durable model
 
 An intent is an objective or problem, classified by an extensible type such as

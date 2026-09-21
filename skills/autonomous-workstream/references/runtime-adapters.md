@@ -6,10 +6,12 @@ monitoring them.
 
 ## Boundary
 
-The runtime adapter owns platform-specific job lifecycle. Kanban remains the
-source of truth for task eligibility, state, WIP, leases, claims, evidence,
-review independence, and completion. A runtime job is an execution mechanism,
-not a replacement for a task or a durable run record.
+The runtime adapter owns platform-specific supervisor and worker lifecycle.
+Kanban remains the source of truth for task eligibility, state, WIP, leases,
+claims, evidence, review independence, and completion. Runtime identities,
+liveness, checkpoints, fencing, retry counts, and dispatch assignments remain
+live adapter/supervisor state; they are not replacement tables or durable run
+records.
 
 Prefer the native detached capability when it supports the required contract.
 If it does not, use an ordinary live worker lane. Do not invent a persistent
@@ -20,17 +22,21 @@ server abstraction from a platform that only promises a bounded job or session.
 An adapter should provide the closest available equivalent of:
 
 ```text
-submit(task, briefing, environment) -> job
-status(job) -> state, progress, outputs, failure
-follow_up(job, message) -> acknowledgement
-cancel(job) -> acknowledgement
-collect_artifacts(job) -> artifacts
-release(job) -> cleanup result
+start_supervisor(objective, environment) -> supervisor_id
+status_supervisor(supervisor_id) -> live/dead, next_wake, failure
+submit_worker(supervisor_id, task, briefing, environment) -> worker_id
+acknowledge_worker(worker_id, task, lease) -> acknowledgement
+status_worker(worker_id) -> state, progress, outputs, failure
+follow_up(worker_id, message) -> acknowledgement
+cancel_worker(worker_id) -> acknowledgement
+collect_artifacts(worker_id) -> artifacts
+release_worker(worker_id) -> cleanup result
 ```
 
 The adapter must expose or document:
 
-- job and task identity;
+- supervisor, worker, and task identity;
+- the worker acknowledgement and task/lease binding;
 - repository, branch, worktree, or workspace identity;
 - isolation boundary and network access;
 - maximum execution lifetime and timeout behavior;
@@ -40,19 +46,26 @@ The adapter must expose or document:
 - status and failure states;
 - whether background processes survive only the current job.
 
+If the adapter cannot verify a live supervisor identity, autonomous continuation
+is unavailable. Run the loop in the foreground and report that fact explicitly.
+
 ## Dispatch sequence
 
-1. Pull and claim the task through Kanban, consuming a lease when required.
-2. Build the live briefing from current task state, criteria, evidence,
+1. Start or verify exactly one supervisor and retain its live identity.
+2. Pull or select the task through Kanban, consuming a lease when required.
+3. Build the live briefing from current task state, criteria, evidence,
    revision, authority limits, model tier, bounded next action, and expected
    checkpoint.
-3. Submit exactly the claimed task to the adapter, preserving task and lease
-   identity in the job metadata or prompt.
-4. Monitor status and follow up only within the task’s authority and bounded
+4. Submit exactly one worker for the task, preserving task and lease identity
+   in the job metadata or prompt, then verify the live worker identity.
+5. Require the worker to acknowledge the task and lease and claim the task
+   through Kanban. The supervisor must not claim implementation or emit worker
+   checkpoints on the worker's behalf.
+6. Monitor status and follow up only within the task’s authority and bounded
    objective.
-5. Collect artifacts and meaningful results before recording task events or
+7. Collect artifacts and meaningful results before recording task events or
    moving state.
-6. On success, failure, cancellation, or timeout, release the job and renew or
+8. On success, failure, cancellation, or timeout, release the worker and renew or
    release Kanban capacity according to the live recovery protocol.
 
 Do not dispatch the same claim to multiple runtime jobs unless the task’s
@@ -69,8 +82,10 @@ when a worker depends on one; stop or release it with the job.
 
 ## Recovery
 
-If adapter status is unavailable, the job times out, or the runtime disappears,
-stop dispatching through its lease and follow the coordination protocol. Do not
+If adapter status is unavailable, the worker times out, or the runtime
+disappears, stop dispatching through its lease and follow the coordination
+protocol. Fence the live worker through the adapter before replacement. Do not
 mark the task complete from a missing or partial response. Inspect repository
-state and durable task evidence, record the recovery decision, and issue a
-fresh briefing before resuming or reassigning.
+state and durable task evidence, record only the meaningful recovery decision,
+and issue a fresh briefing before resuming or reassigning. Recovery identity,
+staleness, and replacement idempotence remain live runtime concerns.

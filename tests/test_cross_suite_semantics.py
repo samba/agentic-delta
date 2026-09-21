@@ -145,6 +145,20 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         self.assertIn("must not implement a task it", workstream)
         self.assertIn("Do not launch one worker per criterion by default", workstream)
 
+    def test_runtime_worker_authority_stays_ephemeral_and_coordinator_is_not_worker(self):
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        coordination = (DELTA / "skills/kanban/references/coordination-protocol.md").read_text()
+        adapter = (DELTA / "skills/autonomous-workstream/references/runtime-adapters.md").read_text()
+        kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
+        self.assertIn("supervisor is coordinator-only", coordination)
+        self.assertIn("must not claim implementation", coordination)
+        self.assertIn("acknowledge the task and lease", adapter)
+        self.assertIn("start_supervisor", adapter)
+        self.assertIn("submit_worker", adapter)
+        self.assertIn("live runtime concerns", adapter)
+        self.assertIn("does not verify runtime worker liveness", kanban)
+        self.assertIn("does not perform", workstream)
+
     def test_pull_flow_contract_is_linked_and_preserves_task_status(self):
         pull = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
         kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
