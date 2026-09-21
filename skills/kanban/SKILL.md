@@ -110,6 +110,8 @@ before refining implementation work into `Ready`.
    selected or consciously extended, any applicable open-source library
    candidates have been evaluated, and scope, ownership, acceptance,
    validation, dependencies, and specialist assurance checks are present.
+   Every task brief must include the project's active guidance principles and
+   tenets; workers evaluate them before beginning the task.
 5. Pull eligible work within state WIP and downstream capacity.
 6. Keep implementation isolated from assurance/control work.
 7. Move completed output into the configured review/validation state with

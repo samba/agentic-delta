@@ -512,6 +512,25 @@ def task_show(conn: sqlite3.Connection, task_id: str) -> None:
     task["state"] = state_name(conn, task["state_id"])
     task["intents"] = [r[0] for r in conn.execute("SELECT intent_id FROM task_intents WHERE task_id=? ORDER BY intent_id", (task_id,))]
     task["checks"] = [dict(r) for r in conn.execute("SELECT * FROM task_checks WHERE task_id=? ORDER BY id", (task_id,))]
+    task["guidance"] = []
+    guidance_rows = conn.execute(
+        """SELECT g.* FROM guidance g
+           JOIN (
+               SELECT id, MAX(version) AS version
+               FROM guidance
+               WHERE status='active' AND guidance_type IN ('principle', 'tenet')
+               GROUP BY id
+           ) current ON current.id=g.id AND current.version=g.version
+           ORDER BY g.guidance_type, g.id"""
+    ).fetchall()
+    for row in guidance_rows:
+        item = dict(row)
+        item["references"] = [reference[0] for reference in conn.execute(
+            """SELECT reference_id FROM guidance_references
+               WHERE guidance_id=? AND guidance_version=? ORDER BY reference_id""",
+            (row["id"], row["version"]),
+        )]
+        task["guidance"].append(item)
     print(json.dumps(task, indent=2, sort_keys=True))
 
 

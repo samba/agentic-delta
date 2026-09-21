@@ -128,6 +128,17 @@ class KanbanKernelTest(unittest.TestCase):
         self.assertEqual(self.row("SELECT COUNT(*) FROM guidance_references")[0], 1)
         self.assertEqual(self.row("SELECT COUNT(*) FROM reference_intents")[0], 1)
 
+    def test_task_show_includes_active_latest_guidance_for_workers(self):
+        self.run_cli("guidance", "add", "safe-change", "Preserve compatibility", "--type", "principle", "--version", "1")
+        self.run_cli("guidance", "add", "review-risk", "Address known risks first", "--type", "tenet", "--version", "1")
+        self.run_cli("guidance", "add", "safe-change", "Superseded wording", "--type", "principle", "--version", "2", "--status", "retired")
+        self.make_task("guided")
+        task = __import__("json").loads(self._capture_cli("task", "show", "guided"))
+        guidance = {item["id"]: item for item in task["guidance"]}
+        self.assertEqual(set(guidance), {"safe-change", "review-risk"})
+        self.assertEqual(guidance["safe-change"]["version"], 1)
+        self.assertEqual(guidance["review-risk"]["statement"], "Address known risks first")
+
     def test_status_json_and_validation(self):
         self.make_task()
         output = io.StringIO()

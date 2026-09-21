@@ -66,6 +66,11 @@ task dependency add <task-id> <dependency-id>
 task dependency remove <task-id> <dependency-id>
 ```
 
+`task show` includes the project's active, latest-version principles and
+tenets, plus their research-reference links. Workers must evaluate these
+guidance entries whenever they begin a task; they are part of the task brief,
+not optional background reading.
+
 `task claim` atomically claims a task whose successor is configured as a
 worker-entry state, validates that successor's requirements, moves the task
 there, and records a claim event. If the task is already in a `review_queue`

@@ -164,8 +164,11 @@ split or refine work that cannot be expressed that way before dispatch.
 
 Every dispatch briefing includes the task and lease IDs, repository/path scope,
 objective, acceptance and validation criteria, current revision, required
-output, permitted tools, prohibited side effects, approval boundaries, stop
-conditions, model/reasoning tier, bounded next action, and expected checkpoint.
+output, active project guidance principles and tenets, permitted tools,
+prohibited side effects, approval boundaries, stop conditions, model/reasoning
+tier, bounded next action, and expected checkpoint. Workers must evaluate the
+guidance before beginning task work and account for it in their design or
+implementation decisions.
 
 Workers report compact live deltas containing the task ID, lease ID, phase
 (`working`, `waiting`, `blocked`, or `complete`), meaningful change, artifact
