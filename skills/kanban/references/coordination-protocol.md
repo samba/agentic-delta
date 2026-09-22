@@ -10,14 +10,28 @@ heartbeats, or chat transcripts.
 The supervisor is coordinator-only. It may select, dispatch, poll, renew,
 requeue, recover, and report, but it must not claim implementation work,
 manufacture worker checkpoints, or present its administrative events as worker
-progress. A worker must acknowledge its task and lease through the live runtime
-channel before it claims `Active` or reports implementation progress.
+progress. A worker must acknowledge its task and lease, complete the capability
+preflight, and emit the first live checkpoint through the runtime channel
+before it claims `Active` or reports implementation progress. Until then, the
+task remains `Ready`.
 
 Worker identity, liveness, start time, checkpoint age, fencing, and replacement
 idempotence belong to the live runtime adapter and supervisor memory. They must
 not be added as Kanban tables or simulated with durable task events. If a live
 worker acknowledgement cannot be obtained, leave work in `Ready` and report
 the dispatch failure.
+
+The first checkpoint is a worker-originated handshake, not a Kanban event: it
+must identify the verified runtime worker, task and lease, start time, bounded
+next action, workspace identity, and environment result. Only that worker may then invoke the
+helper claim using its verified worker ID as actor. A supervisor owner,
+synthetic recovery owner, submission ID, administrative rebrief, or state
+transition never qualifies as worker provenance.
+
+Maintain one live assignment for each serial task. Do not dispatch a second
+worker or reassign a task until the prior worker is fenced through the runtime
+adapter. Requeue and replacement decisions must be idempotent in supervisor
+memory, so repeated wakes cannot create competing workers.
 
 ## Progress messages
 
@@ -67,6 +81,11 @@ chat transcript.
 Independent lanes may continue while one lane waits for authority, a
 dependency, or recovery.
 
+If a task has a confirmed external-capability blocker, leave it in `Ready` and
+hold a live scheduler suppression keyed to the blocker and environment fingerprint.
+Re-test before clearing it; do not treat suppression as a blocked
+Kanban state or repeatedly pull the same unavailable task.
+
 Each fresh briefing states the task and lease IDs, repository/path scope,
 objective, acceptance and validation criteria, current revision, required
 output, permitted tools, prohibited side effects, approval boundaries, stop
@@ -77,4 +96,6 @@ review without moving the task or replacing its implementation owner. Assemble
 a fresh task-scoped review brief from the current revision, acceptance and
 validation criteria, all required checks, all evidence, and recent task events.
 An old implementation plan is context only; it is never evidence that the
-current revision is correct or that review requirements were satisfied.
+current revision is correct or that review requirements were satisfied. Report
+review-worker liveness separately from completed checks, evidence, and the
+review handoff; ownership alone is not review progress.

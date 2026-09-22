@@ -159,6 +159,64 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         self.assertIn("does not verify runtime worker liveness", kanban)
         self.assertIn("does not perform", workstream)
 
+    def test_runtime_operations_cover_cleanup_preflight_and_scheduler_reporting(self):
+        adapter = (DELTA / "skills/autonomous-workstream/references/runtime-adapters.md").read_text()
+        coordination = (DELTA / "skills/kanban/references/coordination-protocol.md").read_text()
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        for phrase in ("repository capability preflight", "close and release the worker"):
+            self.assertIn(phrase, adapter)
+        self.assertIn("one live assignment for each serial task", coordination)
+        self.assertIn("review-worker liveness separately", coordination)
+        for phrase in ("pullable count", "live claimed count", "available lease capacity", "session-cleanup"):
+            self.assertIn(phrase, workstream)
+
+    def test_active_claim_requires_worker_handshake_and_external_suppression(self):
+        adapter = (DELTA / "skills/autonomous-workstream/references/runtime-adapters.md").read_text()
+        coordination = (DELTA / "skills/kanban/references/coordination-protocol.md").read_text()
+        commands = (DELTA / "skills/kanban/references/commands.md").read_text()
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        for text in (adapter, coordination):
+            self.assertIn("first live checkpoint", text)
+            self.assertIn("verified worker ID", text)
+        self.assertIn("task remains `Ready`", coordination)
+        self.assertIn("helper cannot verify runtime", commands)
+        for text in (adapter, coordination, workstream):
+            self.assertIn("external-capability", text)
+            self.assertIn("environment fingerprint", text)
+
+    def test_workstream_continuation_shorthand_drains_all_active_lanes(self):
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        self.assertIn("continue workstream", workstream)
+        self.assertIn("or the shorter `continue`", workstream)
+        self.assertIn("research/refinement", workstream)
+        self.assertIn("implementation of pullable Ready", workstream)
+        self.assertIn("assurance/control review", workstream)
+        self.assertIn("not a status-only", workstream)
+        self.assertIn("active worker count", workstream)
+        self.assertIn("oldest queued age", workstream)
+        self.assertIn("whether the stage is hungry", workstream)
+        self.assertIn("proactively dispatch", workstream)
+        self.assertIn("do not flood Ready", workstream)
+
+    def test_pull_flow_defines_stage_hunger_and_backpressure_reporting(self):
+        pull_flow = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
+        kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
+        self.assertIn("## Stage hunger", pull_flow)
+        self.assertIn("Hunger flows", pull_flow)
+        self.assertIn("full or over-limit stage is not", pull_flow)
+        self.assertIn("live worker count and", kanban)
+
+    def test_revision_bound_work_requires_isolated_writable_workspaces(self):
+        adapter = (DELTA / "skills/autonomous-workstream/references/runtime-adapters.md").read_text()
+        coordination = (DELTA / "skills/kanban/references/coordination-protocol.md").read_text()
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        self.assertIn("provision_workspace", adapter)
+        self.assertIn("isolated writable worktree", adapter)
+        self.assertIn("workspace identity", adapter)
+        self.assertIn("different isolated workspace", adapter)
+        self.assertIn("workspace identity", coordination)
+        self.assertIn("Revision-bound review workers", workstream)
+
     def test_pull_flow_contract_is_linked_and_preserves_task_status(self):
         pull = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
         kanban = (DELTA / "skills/kanban/SKILL.md").read_text()

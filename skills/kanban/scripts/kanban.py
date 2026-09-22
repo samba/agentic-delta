@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import re
 import sqlite3
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -966,6 +968,33 @@ def check_record(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
 
 def evidence_add(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
     require_task(conn, args.task_id)
+    if args.check_id and conn.execute(
+        "SELECT 1 FROM task_checks WHERE id=? AND task_id=?", (args.check_id, args.task_id)
+    ).fetchone() is None:
+        fail(f"Unknown check {args.check_id} for task {args.task_id}")
+    if args.revision:
+        try:
+            verified = subprocess.run(
+                ["git", "rev-parse", "--verify", f"{args.revision}^{{commit}}"],
+                cwd=ROOT, capture_output=True, text=True, check=False, timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            fail(f"Unable to verify revision {args.revision}: {exc}")
+        if verified.returncode != 0:
+            fail(f"Evidence revision is not a Git commit: {args.revision}")
+    artifact_path = None
+    if args.location:
+        artifact_path = (ROOT / args.location).resolve() if not Path(args.location).is_absolute() else Path(args.location).resolve()
+        if not artifact_path.is_file():
+            fail(f"Evidence artifact location is not a file: {args.location}")
+    if args.content_hash:
+        if artifact_path is None:
+            fail("Evidence content hash requires --location")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", args.content_hash):
+            fail("Evidence content hash must be a SHA-256 hex digest")
+        observed_hash = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+        if observed_hash.lower() != args.content_hash.lower():
+            fail(f"Evidence content hash does not match {args.location}")
     with transaction(conn):
         conn.execute(
             """INSERT INTO evidence(id, task_id, check_id, artifact, revision, probe, result,
@@ -975,16 +1004,52 @@ def evidence_add(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
         )
 
 
-def evidence_list(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
+def _evidence_rows(conn: sqlite3.Connection, args: argparse.Namespace) -> list[dict[str, Any]]:
     require_task(conn, args.task_id)
-    rows = [dict(row) for row in conn.execute(
-        "SELECT * FROM evidence WHERE task_id=? ORDER BY created_at, id", (args.task_id,)
+    filters = ["e.task_id=?"]
+    values: list[Any] = [args.task_id]
+    if args.check_id:
+        if conn.execute("SELECT 1 FROM task_checks WHERE id=? AND task_id=?", (args.check_id, args.task_id)).fetchone() is None:
+            fail(f"Unknown check {args.check_id} for task {args.task_id}")
+        filters.append("e.check_id=?")
+        values.append(args.check_id)
+    for name in ("revision", "producer", "result", "artifact"):
+        value = getattr(args, name, None)
+        if value is not None:
+            if not value.strip():
+                fail(f"Evidence filter --{name.replace('_', '-')} cannot be empty")
+            filters.append(f"e.{name}=?")
+            values.append(value)
+    criterion = getattr(args, "criterion", None)
+    if criterion is not None:
+        if not criterion.strip():
+            fail("Evidence filter --criterion cannot be empty")
+        filters.append("c.criterion=?")
+        values.append(criterion)
+    return [dict(row) for row in conn.execute(
+        """SELECT e.* FROM evidence e LEFT JOIN task_checks c ON c.id=e.check_id
+           WHERE """ + " AND ".join(filters) + " ORDER BY e.created_at, e.id" , values
     )]
+
+
+def evidence_list(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
+    rows = _evidence_rows(conn, args)
     if args.as_json:
         print(json.dumps(rows, indent=2, sort_keys=True))
     else:
         for row in rows:
             print("\t".join(str(row[key] or "") for key in ("id", "check_id", "artifact", "result", "producer", "revision", "probe", "location")))
+
+
+def evidence_show(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
+    row = conn.execute("SELECT * FROM evidence WHERE id=?", (args.evidence_id,)).fetchone()
+    if row is None:
+        fail(f"Unknown evidence: {args.evidence_id}")
+    result = dict(row)
+    if args.as_json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print("\t".join(str(result[key] or "") for key in ("id", "task_id", "check_id", "artifact", "result", "producer", "revision", "probe", "location")))
 
 
 def role_add(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
@@ -1060,6 +1125,54 @@ def reference_review(conn: sqlite3.Connection, args: argparse.Namespace) -> None
         if updated.rowcount != 1:
             fail(f"Unknown research reference: {args.reference_id}")
     print(f"reference {args.reference_id} marked {args.review_state}")
+
+
+def reference_list(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
+    values: list[Any] = []
+    filters = []
+    if args.review_state:
+        filters.append("review_state=?")
+        values.append(args.review_state)
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM research_references" + (" WHERE " + " AND ".join(filters) if filters else "") + " ORDER BY id",
+        values,
+    )]
+    for row in rows:
+        row["topics"] = loads(row.pop("topics_json"), [])
+        row["provenance"] = loads(row.pop("provenance_json"), {})
+    if args.as_json:
+        print(json.dumps(rows, indent=2, sort_keys=True))
+    else:
+        for row in rows:
+            print(f"{row['id']}\t{row['review_state']}\t{row['url']}\t{row.get('title') or ''}")
+
+
+def reference_update(conn: sqlite3.Connection, args: argparse.Namespace) -> None:
+    fields = {
+        "url": args.url,
+        "title": args.title,
+        "publisher": args.publisher,
+        "reference_type": args.reference_type,
+        "summary": args.summary,
+        "relevance": args.relevance,
+        "constraints": args.constraints,
+        "content_hash": args.content_hash,
+    }
+    if args.provenance is not None:
+        fields["provenance_json"] = json.dumps(json_object(args.provenance, "provenance"), sort_keys=True)
+    fields = {key: value for key, value in fields.items() if value is not None}
+    if not fields:
+        fail("Reference update requires at least one field")
+    if conn.execute("SELECT 1 FROM research_references WHERE id=?", (args.reference_id,)).fetchone() is None:
+        fail(f"Unknown research reference: {args.reference_id}")
+    fields["updated_at"] = now()
+    assignments = ", ".join(f"{key}=?" for key in fields)
+    with transaction(conn):
+        conn.execute(
+            f"UPDATE research_references SET {assignments} WHERE id=?",
+            (*fields.values(), args.reference_id),
+        )
+    print(f"updated reference {args.reference_id}")
 
 
 def lease_expire(conn: sqlite3.Connection) -> None:
@@ -1316,11 +1429,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = task.add_parser("demand"); demand = p.add_subparsers(dest="demand_command", required=True); q = demand.add_parser("set"); q.add_argument("task_id"); q.add_argument("--parallelism", choices=("serial", "partitionable", "fan-out"), required=True); q.add_argument("--min-workers", type=int, required=True); q.add_argument("--target-workers", type=int, required=True); q.add_argument("--max-workers", type=int, required=True); q.add_argument("--work-units", default="[]"); q.add_argument("--reuse-policy", required=True); q.add_argument("--isolation", required=True); q.add_argument("--aggregation", required=True)
 
     p_review = sub.add_parser("review"); review = p_review.add_subparsers(dest="review_command", required=True); p = review.add_parser("check"); checks = p.add_subparsers(dest="check_command", required=True); q = checks.add_parser("add"); q.add_argument("check_id"); q.add_argument("task_id"); q.add_argument("check_type", choices=CHECK_TYPES); q.add_argument("criterion"); q.add_argument("--role"); q.add_argument("--optional", action="store_true"); q = checks.add_parser("record"); q.add_argument("check_id"); q.add_argument("task_id"); q.add_argument("status", choices=("passed", "failed", "not_applicable")); q.add_argument("--reviewer"); q.add_argument("--reviewer-role"); q.add_argument("--reviewer-worker-id"); q.add_argument("--finding"); q.add_argument("--rationale"); q = checks.add_parser("list"); q.add_argument("task_id")
-    p = sub.add_parser("evidence"); ev = p.add_subparsers(dest="evidence_command", required=True); q = ev.add_parser("add"); q.add_argument("evidence_id"); q.add_argument("task_id"); q.add_argument("artifact"); q.add_argument("--check-id"); q.add_argument("--revision"); q.add_argument("--probe"); q.add_argument("--result", required=True); q.add_argument("--producer", required=True); q.add_argument("--location"); q.add_argument("--content-hash"); q = ev.add_parser("list"); q.add_argument("task_id"); q.add_argument("--json", action="store_true", dest="as_json")
+    p = sub.add_parser("evidence"); ev = p.add_subparsers(dest="evidence_command", required=True); q = ev.add_parser("add"); q.add_argument("evidence_id"); q.add_argument("task_id"); q.add_argument("artifact"); q.add_argument("--check-id"); q.add_argument("--revision"); q.add_argument("--probe"); q.add_argument("--result", required=True); q.add_argument("--producer", required=True); q.add_argument("--location"); q.add_argument("--content-hash"); q = ev.add_parser("list"); q.add_argument("task_id"); q.add_argument("--check-id"); q.add_argument("--criterion"); q.add_argument("--revision"); q.add_argument("--producer"); q.add_argument("--result"); q.add_argument("--artifact"); q.add_argument("--json", action="store_true", dest="as_json"); q = ev.add_parser("show"); q.add_argument("evidence_id"); q.add_argument("--json", action="store_true", dest="as_json")
 
     p_role = sub.add_parser("specialist"); role = p_role.add_subparsers(dest="specialist_command", required=True); q = role.add_parser("add"); q.add_argument("role_id"); q.add_argument("name"); q.add_argument("purpose"); q.add_argument("description"); q = role.add_parser("activate"); q.add_argument("role_id"); q = role.add_parser("deactivate"); q.add_argument("role_id"); role.add_parser("list")
     p_guidance = sub.add_parser("guidance"); guidance = p_guidance.add_subparsers(dest="guidance_command", required=True); q = guidance.add_parser("add"); q.add_argument("guidance_id"); q.add_argument("statement"); q.add_argument("--version", type=int, default=1); q.add_argument("--type", dest="guidance_type", default="principle"); q.add_argument("--outcome"); q.add_argument("--rationale"); q.add_argument("--verification"); q.add_argument("--authority"); q.add_argument("--status", choices=("draft", "active", "retired"), default="active"); q = guidance.add_parser("reference"); q.add_argument("guidance_id"); q.add_argument("reference_id"); q.add_argument("--version", type=int, default=1); q.add_argument("--relationship", default="supports")
-    p_ref = sub.add_parser("reference"); refs = p_ref.add_subparsers(dest="reference_command", required=True); q = refs.add_parser("add"); q.add_argument("reference_id"); q.add_argument("url"); q.add_argument("--title"); q.add_argument("--publisher"); q.add_argument("--reference-type"); q.add_argument("--summary"); q.add_argument("--relevance"); q.add_argument("--constraints"); q.add_argument("--content-hash"); q = refs.add_parser("link"); q.add_argument("reference_id"); q.add_argument("--intent-id"); q.add_argument("--task-id"); q = refs.add_parser("review"); q.add_argument("reference_id"); q.add_argument("review_state", choices=("unreviewed", "reviewed", "rejected"))
+    p_ref = sub.add_parser("reference"); refs = p_ref.add_subparsers(dest="reference_command", required=True); q = refs.add_parser("add"); q.add_argument("reference_id"); q.add_argument("url"); q.add_argument("--title"); q.add_argument("--publisher"); q.add_argument("--reference-type"); q.add_argument("--summary"); q.add_argument("--relevance"); q.add_argument("--constraints"); q.add_argument("--content-hash"); q = refs.add_parser("list"); q.add_argument("--review-state", choices=("unreviewed", "reviewed", "rejected")); q.add_argument("--json", action="store_true", dest="as_json"); q = refs.add_parser("update"); q.add_argument("reference_id"); q.add_argument("--url"); q.add_argument("--title"); q.add_argument("--publisher"); q.add_argument("--reference-type"); q.add_argument("--summary"); q.add_argument("--relevance"); q.add_argument("--constraints"); q.add_argument("--content-hash"); q.add_argument("--provenance"); q = refs.add_parser("link"); q.add_argument("reference_id"); q.add_argument("--intent-id"); q.add_argument("--task-id"); q = refs.add_parser("review"); q.add_argument("reference_id"); q.add_argument("review_state", choices=("unreviewed", "reviewed", "rejected"))
 
     p_pull = sub.add_parser("pull"); pull = p_pull.add_subparsers(dest="pull_command", required=True); q = pull.add_parser("next"); q.add_argument("--claim", action="store_true"); q.add_argument("--lease", help="atomically consume one lease slot and claim the next eligible task"); q.add_argument("--actor", default="coordinator"); q.add_argument("--json", action="store_true", dest="as_json"); p_lease = pull.add_parser("lease"); lease = p_lease.add_subparsers(dest="lease_command", required=True); q = lease.add_parser("issue"); q.add_argument("lease_id"); q.add_argument("--stage", required=True); q.add_argument("--lane", required=True); q.add_argument("--slots", type=int, required=True); q.add_argument("--eligibility", default="{}"); q.add_argument("--required-output", required=True); q.add_argument("--owner", required=True); q.add_argument("--ttl-seconds", type=int, required=True); q.add_argument("--idempotency-key", required=True); q = lease.add_parser("renew"); q.add_argument("lease_id"); q.add_argument("--ttl-seconds", type=int, required=True); q = lease.add_parser("release"); q.add_argument("lease_id"); q = lease.add_parser("reserve"); q.add_argument("lease_id"); q.add_argument("task_id"); q.add_argument("--slots", type=int, default=1); q = lease.add_parser("release-reservation"); q.add_argument("lease_id"); q.add_argument("task_id")
     return parser
@@ -1371,7 +1484,9 @@ def dispatch(args: argparse.Namespace, conn: sqlite3.Connection) -> int:
                 print("\t".join(str(row[k] or "") for k in ("id", "check_type", "criterion", "specialist_role_id", "status", "reviewer", "reviewer_role_id", "reviewer_worker_id")))
         return 0
     if args.command == "evidence":
-        evidence_add(conn, args) if args.evidence_command == "add" else evidence_list(conn, args)
+        if args.evidence_command == "add": evidence_add(conn, args)
+        elif args.evidence_command == "show": evidence_show(conn, args)
+        else: evidence_list(conn, args)
         return 0
     if args.command == "specialist":
         if args.specialist_command == "add": role_add(conn, args)
@@ -1385,6 +1500,8 @@ def dispatch(args: argparse.Namespace, conn: sqlite3.Connection) -> int:
         return 0
     if args.command == "reference":
         if args.reference_command == "add": reference_add(conn, args)
+        elif args.reference_command == "list": reference_list(conn, args)
+        elif args.reference_command == "update": reference_update(conn, args)
         elif args.reference_command == "link": reference_link(conn, args)
         else: reference_review(conn, args)
         return 0

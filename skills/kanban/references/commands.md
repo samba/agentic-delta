@@ -76,6 +76,11 @@ worker-entry state, validates that successor's requirements, moves the task
 there, and records a claim event. If the task is already in a `review_queue`
 state, it records a review claim without moving the task or changing its
 implementation owner. It does not bind a capacity lease to the task.
+For implementation claims, `<worker>` must be the verified live runtime worker
+ID after that worker has acknowledged the assignment and emitted its first
+checkpoint. A supervisor, logical role, synthetic recovery owner, or detached
+submission ID must not be passed as the actor. The helper cannot verify runtime
+liveness; the runtime adapter owns that precondition.
 
 `task refine` updates scope, owner, acceptance criteria, validation criteria,
 or task details and records a refinement event. `task assign` changes the
@@ -138,9 +143,20 @@ review check list <task-id>
 
 evidence add <evidence-id> <task-id> <artifact> \
   --result <result> --producer <identity> [--check-id <check-id>] \
-  [--revision <revision>] [--probe <probe>] [--location <location>]
-evidence list <task-id> [--json]
+  [--revision <revision>] [--probe <probe>] [--location <location>] \
+  [--content-hash <sha256>]
+evidence list <task-id> [--check-id <check-id>] [--criterion <criterion>] \
+  [--revision <revision>] [--producer <identity>] [--result <result>] \
+  [--artifact <artifact>] [--json]
+evidence show <evidence-id> [--json]
 ```
+
+Evidence filters are exact-match and results are ordered by creation time and
+ID. Unknown task, check, or evidence IDs fail explicitly; an empty valid
+filter returns an empty result. When `--revision` is supplied, it must resolve
+to a Git commit in the current repository. When `--location` is supplied, it
+must identify a file; `--content-hash` requires that location and must match
+its SHA-256 digest.
 
 When a task enters a state whose policy requires assurance, every active
 specialist role is enlisted in a required assurance check. The database
@@ -163,10 +179,19 @@ Guidance is versioned in one table. It may cite research references.
 
 ```bash
 reference add <id> <url> [--title <title>] [--publisher <publisher>]
+reference list [--review-state unreviewed|reviewed|rejected] [--json]
+reference update <id> [--url <url>] [--title <title>] [--publisher <publisher>] \
+  [--reference-type <type>] [--summary <text>] [--relevance <text>] \
+  [--constraints <text>] [--content-hash <hash>] [--provenance '<json-object>']
 reference link <reference-id> --intent-id <intent-id>
 reference link <reference-id> --task-id <task-id>
 reference review <reference-id> reviewed|rejected|unreviewed
 ```
+
+`reference list` is deterministic and machine-readable with `--json`.
+`reference update` repairs incomplete metadata in place and requires at least
+one field; provenance must be a JSON object. Use it instead of direct database
+edits.
 
 Design work should gather and review sources before finalizing task scope or
 guidance.

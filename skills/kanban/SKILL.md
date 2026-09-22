@@ -134,6 +134,12 @@ subject to the current pull path and refinement capacity. The low-cost
 supervisor detects and dispatches this work; it does not perform the research or
 refinement itself.
 
+For a continuation request, report each active stage's live worker count and
+durable queue pressure separately: queued and pullable tasks, WIP occupancy and
+overage, oldest queued age, and hunger for eligible predecessor work. A hungry
+stage pulls from its predecessor after exit criteria are met; a full stage
+prioritizes clearing its own pressure instead of admitting more upstream work.
+
 An execution request is not complete when `Ready=0`, when one worker finishes,
 or when the foreground turn is ending. Before stopping, run a final scheduling
 pass that accounts for Backlog tasks whose dependencies and entry requirements

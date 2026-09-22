@@ -63,6 +63,24 @@ implementation may continue past a soft downstream WIP budget when its defined
 work units advance a valuable outcome and the supervisor continues to
 prioritize clearing the overage.
 
+## Stage hunger
+
+Treat each configured non-terminal stage as a pull point. A stage is hungry
+when it has available downstream worker or lease capacity and eligible work in
+its predecessor has satisfied the predecessor's exit criteria. Hunger flows
+upstream: Review hunger asks Active work to advance; Active hunger asks Ready
+work to advance; Ready hunger asks bounded research/refinement workers to
+advance eligible Backlog tasks into Ready. A full or over-limit stage is not
+hungry for more upstream work; it creates a priority request to clear,
+validate, repair, or review the stage.
+
+The supervisor should report stage hunger separately from occupancy and worker
+count. Occupancy is durable task state, worker count is live runtime state, and
+hunger is a scheduling judgment derived from downstream capacity, eligibility,
+and exit criteria. Proactive Ready replenishment is permitted when Ready is
+hungry or below target, but it remains bounded by refinement demand and the
+available pull path; it must not flood the board.
+
 ## Completion priority
 
 The coordinator prioritizes completing, validating, and repairing in-flight

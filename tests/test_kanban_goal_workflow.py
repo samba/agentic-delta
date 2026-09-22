@@ -1,6 +1,8 @@
 import contextlib
+import hashlib
 import importlib.util
 import io
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -79,7 +81,7 @@ class KanbanKernelTest(unittest.TestCase):
         checks = self._all("SELECT id, specialist_role_id FROM task_checks WHERE task_id='task-1'")
         for check in checks:
             self.run_cli("review", "check", "record", check["id"], "task-1", "passed", "--reviewer", check["specialist_role_id"])
-            self.run_cli("evidence", "add", f"evidence-{check['id']}", "task-1", "bounded artifact", "--check-id", check["id"], "--result", "pass", "--producer", check["specialist_role_id"], "--revision", "rev-1")
+            self.run_cli("evidence", "add", f"evidence-{check['id']}", "task-1", "bounded artifact", "--check-id", check["id"], "--result", "pass", "--producer", check["specialist_role_id"], "--revision", "HEAD")
         self.run_cli("task", "move", "task-1", "Done")
         self.assertEqual(self.row("SELECT s.name FROM tasks t JOIN task_states s ON s.id=t.state_id WHERE t.id='task-1'")[0], "Done")
 
@@ -258,6 +260,44 @@ class KanbanKernelTest(unittest.TestCase):
         self.assertEqual(self.row("SELECT s.name FROM tasks t JOIN task_states s ON s.id=t.state_id WHERE t.id='review-pull'")[0], "Review")
         self.assertEqual(self.row("SELECT owner FROM tasks WHERE id='review-pull'")[0], "implementer")
         self.assertIsNotNone(self.row("SELECT id FROM pull_capacity_reservations WHERE task_id='review-pull' AND status='active'"))
+
+    def test_evidence_inspection_filters_and_provenance_validation(self):
+        self.make_task("evidence-query")
+        self.run_cli("task", "move", "evidence-query", "Ready")
+        check = self.row("SELECT id, criterion FROM task_checks WHERE task_id='evidence-query' ORDER BY id LIMIT 1")
+        artifact = ROOT / "README.md"
+        digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        self.run_cli(
+            "evidence", "add", "evidence-query-proof", "evidence-query", "README proof",
+            "--check-id", check["id"], "--result", "pass", "--producer", "reviewer",
+            "--revision", "HEAD", "--location", "README.md", "--content-hash", digest,
+        )
+        with self.assertRaises(SystemExit):
+            self.run_cli("evidence", "add", "bad-revision", "evidence-query", "artifact", "--result", "pass", "--producer", "worker", "--revision", "not-a-commit")
+        with self.assertRaises(SystemExit):
+            self.run_cli("evidence", "add", "bad-hash", "evidence-query", "artifact", "--result", "pass", "--producer", "worker", "--location", "README.md", "--content-hash", "0" * 64)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.run_cli("evidence", "list", "evidence-query", "--check-id", check["id"], "--criterion", check["criterion"], "--revision", "HEAD", "--producer", "reviewer", "--result", "pass", "--json")
+        rows = json.loads(output.getvalue())
+        self.assertEqual([row["id"] for row in rows], ["evidence-query-proof"])
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.run_cli("evidence", "show", "evidence-query-proof", "--json")
+        self.assertEqual(json.loads(output.getvalue())["content_hash"], digest)
+
+    def test_research_references_can_be_listed_and_repaired(self):
+        self.run_cli("reference", "add", "source-1", "https://example.test/source", "--title", "Source", "--summary", "incomplete")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.run_cli("reference", "list", "--json")
+        self.assertEqual(json.loads(output.getvalue())[0]["summary"], "incomplete")
+        self.run_cli("reference", "update", "source-1", "--relevance", "Directly informs the task", "--constraints", "Vendor publication", "--provenance", '{"retrieved_by":"researcher"}')
+        updated = self.row("SELECT relevance, constraints, provenance_json FROM research_references WHERE id='source-1'")
+        self.assertEqual(updated["relevance"], "Directly informs the task")
+        self.assertEqual(json.loads(updated["provenance_json"])["retrieved_by"], "researcher")
+        with self.assertRaises(SystemExit):
+            self.run_cli("reference", "update", "source-1")
 
     def test_new_or_reactivated_specialist_is_synced_to_unfinished_assurance_tasks(self):
         self.make_task("roster-task")

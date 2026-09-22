@@ -90,6 +90,29 @@ the adapter.
 
 ## Queue-draining loop
 
+### Continuation shorthand
+
+Treat `continue workstream` (or the shorter `continue`) as an execution
+request to resume autonomous queue draining. It means: establish or verify the
+supervisor, walk the active board, and dispatch the bounded workers needed for
+research/refinement of eligible Backlog work, implementation of pullable Ready
+work, and assurance/control review of Review work. It is not a status-only
+request and does not require the user to name each worker lane.
+
+On this command, continue scheduling after each completion, review result,
+rework result, lease release, or supervisor wake until no unblocked pullable
+work remains or an explicit authority, dependency, environment, or user stop
+condition applies. Respect task worker-demand contracts, keep implementation
+separate from assurance/control, and reuse compatible review workers serially.
+If detached continuation was requested but cannot be verified, report
+foreground-only operation rather than claiming that background work is active.
+Every response to this command includes a compact per-stage flow report for
+each configured active stage: active worker count, queued task count, pullable
+task count, WIP limit and occupancy/overage, oldest queued age, pressure, and
+whether the stage is hungry for upstream work. Worker counts come from live
+runtime state; task counts and WIP come from Kanban. Do not infer worker count
+from task count or WIP.
+
 Before dispatching the first worker for an execution request, establish the
 supervisor lifetime. If background continuation is requested, submit and
 verify one detached supervisor job through the runtime adapter; retain its job
@@ -105,19 +128,26 @@ Every supervisor wake performs a queue-drain scheduling pass:
 2. refresh active pull-capacity leases and expose each walked state's occupancy,
    WIP limit, fullness, and overage;
 3. prioritize clearing WIP overage and actionable downstream work;
-4. when Ready is below its finite WIP limit, dispatch bounded,
-   research-capable refinement workers for the most valuable eligible Backlog
-   candidates; the supervisor selects and briefs this work but does not perform
-   its research or refinement itself;
-5. collect work from configured review/validation states before admitting new
+4. derive stage hunger from downstream pull capacity and ready-to-advance work:
+   a hungry stage requests the next eligible tasks from its predecessor, while
+   a full or over-limit stage requests completion, review, or recovery rather
+   than more upstream admission;
+5. when Ready is hungry or below its finite WIP target, proactively dispatch
+   bounded, research-capable refinement workers for the most valuable eligible,
+   unclaimed Backlog candidates so work can become Ready before implementation
+   demand arrives. Bound replenishment by the Ready deficit, defined worker
+   demand, available authority, and downstream flow; do not flood Ready. The
+   supervisor selects and briefs this work but does not perform its research or
+   refinement itself;
+6. collect work from configured review/validation states before admitting new
    implementation when those states are the active constraint;
-6. prioritize the smallest unblocker that releases downstream pull capacity;
-7. group compatible assurance/control checks for serial specialist reuse;
-8. pull the next most-ready tasks only when downstream capacity exists;
-9. start only the workers necessary for current pullable work, each with a
+7. prioritize the smallest unblocker that releases downstream pull capacity;
+8. group compatible assurance/control checks for serial specialist reuse;
+9. pull the next most-ready tasks only when downstream capacity exists;
+10. start only the workers necessary for current pullable work, each with a
    bounded next action, expected progress checkpoint, and compact authority
    briefing;
-10. after every completion, rework result, validation result, or capacity release,
+11. after every completion, rework result, validation result, or capacity release,
    repeat the pass.
 
 The walk also runs periodically while workers remain active, not only after a
@@ -129,9 +159,22 @@ gather additional sources when needed, evaluate reusable open-source libraries
 and existing patterns, and record the rationale before moving the task to
 Ready.
 
+Each supervisor wake reports a compact live snapshot containing the supervisor
+identity, supervision mode (`foreground` or `detached`), next wake, the
+per-stage flow report, available lease capacity, review liveness and progress,
+WIP overage, and the dispatch, recovery, replenishment, or session-cleanup
+action taken. If detached persistence is unavailable, report foreground-only
+operation explicitly.
+
 Continue until no unblocked pullable work remains, or work is permission-gated,
 manually reserved, externally blocked, or explicitly deferred. Completion of a
 single slice is a scheduling event, not a reason to stop.
+
+An external-capability failure is a live scheduling suppression, not a new
+Kanban status: leave the task in `Ready`, retain the blocker and environment fingerprint
+in supervisor memory, and retry only after the capability changes or
+a fresh session re-tests it. Do not repeatedly requeue the same unavailable
+task.
 
 The supervisor may stop only after a final pass confirms all of the following:
 no actionable review/validation item remains, no recoverable stale worker
@@ -163,12 +206,18 @@ split or refine work that cannot be expressed that way before dispatch.
 ## Worker briefing and live progress
 
 Every dispatch briefing includes the task and lease IDs, repository/path scope,
-objective, acceptance and validation criteria, current revision, required
-output, active project guidance principles and tenets, permitted tools,
+workspace identity, branch, repository, and revision scope, objective,
+acceptance and validation criteria, current revision, required output, active
+project guidance principles and tenets, permitted tools,
 prohibited side effects, approval boundaries, stop conditions, model/reasoning
 tier, bounded next action, and expected checkpoint. Workers must evaluate the
 guidance before beginning task work and account for it in their design or
 implementation decisions.
+
+Implementation workers must return the exact committed revision, workspace
+identity, changed paths, and validation evidence. Revision-bound review workers
+must use a different isolated workspace and validate that committed revision;
+an uncommitted parent checkout or unrevisioned report is insufficient.
 
 Workers report compact live deltas containing the task ID, lease ID, phase
 (`working`, `waiting`, `blocked`, or `complete`), meaningful change, artifact
