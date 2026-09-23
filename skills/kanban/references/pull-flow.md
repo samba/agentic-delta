@@ -25,6 +25,30 @@ among otherwise comparable tasks and apply aging so longer tasks are not
 starved. Pull only work that satisfies the next stage's entry contract and has
 a bounded handoff to its required output.
 
+## Stage transition processes
+
+A queue is a waiting area, not a completion state. Every transition is an
+active pull-and-handoff process: the downstream stage requests eligible work,
+the responsible lane performs the predecessor exit work, evidence is assembled,
+and only then is the task moved and handed to the next stage. A state change by
+itself is not evidence that the transition process occurred.
+
+The default workflow defines these processes:
+
+| Transition | Responsible process | Required handoff | Failure or rework |
+| --- | --- | --- | --- |
+| Backlog → Ready | Research-capable refinement worker reviews linked research, selects or extends a pattern, evaluates applicable open-source libraries, applies guidance, and defines scope, acceptance, validation, dependencies, and assurance checks. | Ready task contract and refinement rationale. | Remain in Backlog with the missing refinement input recorded. |
+| Ready → Active | Implementation demand pulls an eligible task; a worker receives a verified writable workspace, completes preflight, emits its first checkpoint, and claims the task. | Worker/lease identity, workspace, bounded action, and active checkpoint. | Remain in Ready; release capacity and suppress only a confirmed environment blocker. |
+| Active → Review | Implementation worker completes the bounded slice, commits the revision, runs validation, records revision-bound evidence, and hands off the current artifact set. | Exact revision, changed paths, tests, evidence, and review brief. | Rework in Active or requeue to the predecessor with a concrete reason. |
+| Review → Done | Independent assurance/control worker pulls the review, evaluates all task-bound checks and evidence against the current revision, and qualifies terminal criteria. | Passed or justified checks, evidence, findings, and completion decision. | Rework to the configured predecessor; never silently mark Done. |
+
+For custom workflows, define the equivalent process between every predecessor
+and successor using the predecessor's exit criteria, successor's entry
+criteria, responsible lane, handoff evidence, and rework destination. State
+names, WIP values, or a direct `move` command do not define that process. If
+the process or handoff is unclear, do not advance the task; ask for refinement
+or record the concrete missing input.
+
 ## WIP and worker demand
 
 Column WIP limits are soft flow budgets: they indicate desired buffering and

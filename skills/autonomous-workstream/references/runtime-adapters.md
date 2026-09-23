@@ -61,6 +61,9 @@ metadata writes, and test/artifact locations. A failed preflight leaves the
 task in `Ready` with a concrete environment blocker; it does not create an
 `Active` claim.
 
+The worker must acknowledge the task and lease only after the repository
+capability preflight has succeeded.
+
 If the adapter cannot verify a live supervisor identity, autonomous continuation
 is unavailable. Run the loop in the foreground and report that fact explicitly.
 

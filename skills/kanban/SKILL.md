@@ -63,6 +63,13 @@ Its detailed contract is canonical. The local invariants are:
   assurance/control independent from implementation;
 - every assignment has one bounded next action and an expected checkpoint.
 
+Queues are not static holding areas. Every state transition is an active
+pull-and-handoff process with predecessor exit criteria, successor entry
+criteria, a responsible lane, required evidence, and an explicit rework path.
+Moving a task with a direct state command does not substitute for that process.
+Read [pull-flow](references/pull-flow.md) for the default transition processes
+and apply the equivalent contract to custom states.
+
 ## Assurance and control
 
 `specialist_roles` is the reusable role catalog. When a task enters a state
@@ -112,14 +119,16 @@ before refining implementation work into `Ready`.
    validation, dependencies, and specialist assurance checks are present.
    Every task brief must include the project's active guidance principles and
    tenets; workers evaluate them before beginning the task.
-5. Pull eligible work within state WIP and downstream capacity.
+5. Pull eligible work within state WIP and downstream capacity, executing the
+   defined transition process rather than treating the queue as passive.
 6. Keep implementation isolated from assurance/control work.
-7. Move completed output into the configured review/validation state with
-   evidence and resolved checks. Review workers claim that existing review
-   state without moving it or replacing the implementation owner, then build
-   a fresh brief from current checks, evidence, revision, and task events.
-8. Move work into a terminal state only after that state’s required checks and
-   evidence qualify it.
+7. Move completed output into the configured review/validation state only after
+   the implementation-to-review handoff process produces its required revision,
+   validation, and evidence. Review workers claim that existing review state
+   without moving it or replacing the implementation owner, then build a fresh
+   brief from current checks, evidence, revision, and task events.
+8. Move work into a terminal state only after the review-to-terminal process
+   satisfies that state’s required checks and evidence.
 9. Re-evaluate the queues after every completion, review result, rework, or
    capacity release; continue until no pullable work remains.
 
@@ -139,6 +148,12 @@ durable queue pressure separately: queued and pullable tasks, WIP occupancy and
 overage, oldest queued age, and hunger for eligible predecessor work. A hungry
 stage pulls from its predecessor after exit criteria are met; a full stage
 prioritizes clearing its own pressure instead of admitting more upstream work.
+
+`complete workstream` is the completion mandate for an in-scope project
+objective. It keeps a recurrent supervisor loop across all non-terminal states,
+reports every iteration, and does not stop merely because no task is currently
+pullable. It stops only at terminal completion, explicit user stop, or an
+authority/safety condition that prevents further work.
 
 An execution request is not complete when `Ready=0`, when one worker finishes,
 or when the foreground turn is ending. Before stopping, run a final scheduling

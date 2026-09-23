@@ -107,11 +107,39 @@ separate from assurance/control, and reuse compatible review workers serially.
 If detached continuation was requested but cannot be verified, report
 foreground-only operation rather than claiming that background work is active.
 Every response to this command includes a compact per-stage flow report for
-each configured active stage: active worker count, queued task count, pullable
-task count, WIP limit and occupancy/overage, oldest queued age, pressure, and
+each configured active stage: active worker count, live claimed count, queued
+task count, pullable count, WIP limit and occupancy/overage, oldest queued age, pressure, and
 whether the stage is hungry for upstream work. Worker counts come from live
 runtime state; task counts and WIP come from Kanban. Do not infer worker count
 from task count or WIP.
+
+### Completion command
+
+Treat `complete workstream` (also `run to completion`) as a completion mandate,
+not an ordinary continuation request. Establish a persistent supervisor when
+the platform supports it, capture the in-scope project/objective, and run a
+recurrent scheduling loop until every in-scope task is in a configured terminal
+state (normally `Done`). The loop must include Backlog, Ready, Active, Review,
+custom intermediate states, and rework; it must not stop because one queue is
+empty, one worker finished, or no task is immediately pullable.
+The loop spans all non-terminal states, not only the currently active queue.
+
+Each iteration must produce a progress report before the next wait or dispatch.
+The report includes the iteration number and time, supervisor identity and
+mode, next wake, every stage's worker count and queue-pressure report, tasks
+remaining by state, transitions attempted/completed/reworked, active blockers,
+suppressed lanes, and the next actions. When no task is currently pullable,
+the supervisor reports why, retains the loop, and schedules the next
+replenishment, recovery, capability retry, or dependency wake; it must not
+return control to the user merely to be prompted again. It must not return control to the user simply because a cycle is waiting.
+
+The completion loop may stop only when all in-scope tasks are terminal, the
+user explicitly stops it, or an authority/safety condition makes further work
+impermissible. A dependency, environment, or external capability blocker is a
+reported condition for continued monitoring, not completion. If detached
+supervision cannot be verified, report that the completion mandate cannot
+continue beyond the foreground runtime rather than claiming autonomous
+completion.
 
 Before dispatching the first worker for an execution request, establish the
 supervisor lifetime. If background continuation is requested, submit and
@@ -128,26 +156,29 @@ Every supervisor wake performs a queue-drain scheduling pass:
 2. refresh active pull-capacity leases and expose each walked state's occupancy,
    WIP limit, fullness, and overage;
 3. prioritize clearing WIP overage and actionable downstream work;
-4. derive stage hunger from downstream pull capacity and ready-to-advance work:
+4. treat every transition as an active process, not a queue mutation: identify
+   the downstream request, predecessor exit criteria, responsible lane,
+   handoff evidence, and rework destination before dispatching or advancing;
+5. derive stage hunger from downstream pull capacity and ready-to-advance work:
    a hungry stage requests the next eligible tasks from its predecessor, while
    a full or over-limit stage requests completion, review, or recovery rather
    than more upstream admission;
-5. when Ready is hungry or below its finite WIP target, proactively dispatch
+6. when Ready is hungry or below its finite WIP target, proactively dispatch
    bounded, research-capable refinement workers for the most valuable eligible,
    unclaimed Backlog candidates so work can become Ready before implementation
    demand arrives. Bound replenishment by the Ready deficit, defined worker
    demand, available authority, and downstream flow; do not flood Ready. The
-   supervisor selects and briefs this work but does not perform its research or
-   refinement itself;
-6. collect work from configured review/validation states before admitting new
+   supervisor selects and briefs this work but does not perform its research or refinement itself;
+   this includes the `Ready is below its finite WIP limit` replenishment signal.
+7. collect work from configured review/validation states before admitting new
    implementation when those states are the active constraint;
-7. prioritize the smallest unblocker that releases downstream pull capacity;
-8. group compatible assurance/control checks for serial specialist reuse;
-9. pull the next most-ready tasks only when downstream capacity exists;
-10. start only the workers necessary for current pullable work, each with a
+8. prioritize the smallest unblocker that releases downstream pull capacity;
+9. group compatible assurance/control checks for serial specialist reuse;
+10. pull the next most-ready tasks only when downstream capacity exists;
+11. start only the workers necessary for current pullable work, each with a
    bounded next action, expected progress checkpoint, and compact authority
    briefing;
-11. after every completion, rework result, validation result, or capacity release,
+12. after every completion, rework result, validation result, or capacity release,
    repeat the pass.
 
 The walk also runs periodically while workers remain active, not only after a

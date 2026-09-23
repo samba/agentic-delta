@@ -198,6 +198,18 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         self.assertIn("proactively dispatch", workstream)
         self.assertIn("do not flood Ready", workstream)
 
+    def test_completion_command_requires_recurrent_reports_until_terminal(self):
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
+        self.assertIn("complete workstream", workstream)
+        self.assertIn("run to completion", workstream)
+        self.assertIn("completion mandate", workstream)
+        self.assertIn("every in-scope task", workstream)
+        self.assertIn("Each iteration must produce a progress report", workstream)
+        self.assertIn("must not return control to the user", workstream)
+        self.assertIn("all non-terminal states", workstream)
+        self.assertIn("recurrent supervisor loop", kanban)
+
     def test_pull_flow_defines_stage_hunger_and_backpressure_reporting(self):
         pull_flow = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
         kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
@@ -205,6 +217,17 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         self.assertIn("Hunger flows", pull_flow)
         self.assertIn("full or over-limit stage is not", pull_flow)
         self.assertIn("live worker count and", kanban)
+
+    def test_stage_transitions_are_defined_pull_and_handoff_processes(self):
+        pull_flow = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
+        kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
+        workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
+        self.assertIn("## Stage transition processes", pull_flow)
+        for phrase in ("Backlog → Ready", "Ready → Active", "Active → Review", "Review → Done"):
+            self.assertIn(phrase, pull_flow)
+        self.assertIn("A state change by", pull_flow)
+        self.assertIn("Queues are not static", kanban)
+        self.assertIn("treat every transition as an active process", workstream)
 
     def test_revision_bound_work_requires_isolated_writable_workspaces(self):
         adapter = (DELTA / "skills/autonomous-workstream/references/runtime-adapters.md").read_text()
