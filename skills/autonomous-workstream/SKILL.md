@@ -123,6 +123,12 @@ state (normally `Done`). The loop must include Backlog, Ready, Active, Review,
 custom intermediate states, and rework; it must not stop because one queue is
 empty, one worker finished, or no task is immediately pullable.
 The loop spans all non-terminal states, not only the currently active queue.
+Backlog is an active refinement queue in this mode: each iteration inventories
+the remaining Backlog, selects eligible candidates, and dispatches
+research-capable refinement workers to execute the Backlog → Ready process.
+The mandate is not satisfied while an in-scope task remains in Backlog merely
+because Ready is temporarily full; the task may wait for admission capacity,
+but its refinement demand and next wake must remain visible.
 
 Each iteration must produce a progress report before the next wait or dispatch.
 The report includes the iteration number and time, supervisor identity and
@@ -150,9 +156,10 @@ do not imply that work will continue after the turn ends.
 
 Every supervisor wake performs a queue-drain scheduling pass:
 
-1. walk the active board with `status --json`, inspecting only Ready, Active,
-   Review, or their configured policy equivalents; exclude Backlog and terminal
-   states from the walk;
+1. walk the board with `status --json`; ordinary continuation may focus on
+   Ready, Active, Review, or their configured policy equivalents, but
+   `complete workstream` must also inventory every in-scope Backlog task and
+   terminal-state count on every iteration;
 2. refresh active pull-capacity leases and expose each walked state's occupancy,
    WIP limit, fullness, and overage;
 3. prioritize clearing WIP overage and actionable downstream work;
@@ -181,7 +188,7 @@ Every supervisor wake performs a queue-drain scheduling pass:
 12. after every completion, rework result, validation result, or capacity release,
    repeat the pass.
 
-The walk also runs periodically while workers remain active, not only after a
+In completion mode, the walk also runs periodically while workers remain active, not only after a
 worker event. A Ready deficit is a pull signal for research and refinement, not
 permission to start unbounded refinement or implementation work. Cap dispatch
 by the deficit, defined worker demand, available authority, and downstream

@@ -49,6 +49,12 @@ names, WIP values, or a direct `move` command do not define that process. If
 the process or handoff is unclear, do not advance the task; ask for refinement
 or record the concrete missing input.
 
+In `complete workstream` mode, Backlog is never treated as an excluded source
+queue. Each iteration inventories its remaining tasks, dispatches bounded
+research/refinement work for eligible candidates, and reports candidates that
+are refined but waiting for Ready admission capacity. Completion requires the
+in-scope Backlog to be empty and all admitted work to reach a terminal state.
+
 ## WIP and worker demand
 
 Column WIP limits are soft flow budgets: they indicate desired buffering and

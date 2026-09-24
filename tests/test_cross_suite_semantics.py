@@ -201,6 +201,7 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
     def test_completion_command_requires_recurrent_reports_until_terminal(self):
         workstream = (DELTA / "skills/autonomous-workstream/SKILL.md").read_text()
         kanban = (DELTA / "skills/kanban/SKILL.md").read_text()
+        pull_flow = (DELTA / "skills/kanban/references/pull-flow.md").read_text()
         self.assertIn("complete workstream", workstream)
         self.assertIn("run to completion", workstream)
         self.assertIn("completion mandate", workstream)
@@ -208,7 +209,11 @@ class CrossSuiteSemanticsTest(unittest.TestCase):
         self.assertIn("Each iteration must produce a progress report", workstream)
         self.assertIn("must not return control to the user", workstream)
         self.assertIn("all non-terminal states", workstream)
+        self.assertIn("Backlog is an active refinement queue", workstream)
+        self.assertIn("must also inventory every in-scope Backlog task", workstream)
         self.assertIn("recurrent supervisor loop", kanban)
+        self.assertIn("in-scope Backlog is drained", kanban)
+        self.assertIn("Backlog is never treated as an excluded source", pull_flow)
 
     def test_pull_flow_defines_stage_hunger_and_backpressure_reporting(self):
         pull_flow = (DELTA / "skills/kanban/references/pull-flow.md").read_text()

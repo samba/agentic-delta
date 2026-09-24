@@ -154,6 +154,10 @@ objective. It keeps a recurrent supervisor loop across all non-terminal states,
 reports every iteration, and does not stop merely because no task is currently
 pullable. It stops only at terminal completion, explicit user stop, or an
 authority/safety condition that prevents further work.
+Backlog is included as an active refinement queue: every iteration inventories
+remaining Backlog work, dispatches research-capable refinement workers, and
+continues the Backlog → Ready → Active → Review → terminal progression until
+the in-scope Backlog is drained.
 
 An execution request is not complete when `Ready=0`, when one worker finishes,
 or when the foreground turn is ending. Before stopping, run a final scheduling
